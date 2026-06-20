@@ -13,6 +13,9 @@ function glyph(key, color) {
   if (key === 'calisma') {
     return `<path d="M16 10.2l3.7 6.6H12.3z" fill="none" stroke="${color}" stroke-width="1.7" stroke-linejoin="round"/><circle cx="16" cy="15.2" r="0.95" fill="${color}"/>`;
   }
+  if (key === 'diger') {
+    return `<circle cx="16" cy="14.5" r="2" fill="${color}"/>`;
+  }
   // rampa — eğimli rampa biçimi
   return `<path d="M12 17.6 L20 11.8" stroke="${color}" stroke-width="1.9" stroke-linecap="round"/><path d="M11.8 17.8 H20.2" stroke="${color}" stroke-width="1.9" stroke-linecap="round"/>`;
 }

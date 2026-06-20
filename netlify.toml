@@ -19,3 +19,8 @@
   from = "/api/route"
   to = "/.netlify/functions/route"
   status = 200
+
+[[redirects]]
+  from = "/api/boundary"
+  to = "/.netlify/functions/boundary"
+  status = 200

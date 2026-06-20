@@ -12,6 +12,7 @@ import { REFUTE_THRESHOLD, MERGE_RADIUS_M } from './lib/status.js';
 import { fetchMetro } from './lib/metro.js';
 import { fetchOsmInfra } from './lib/osm.js';
 import { fetchRoute } from './lib/route.js';
+import { fetchBoundary } from './lib/boundary.js';
 
 const MEYDAN = [41.0268, 29.0152];
 // Bildirim ömrü kategoriye göre (dk) — kalıcı engeller (rampa/asansör) daha uzun
@@ -87,6 +88,7 @@ export default function App() {
   const [route, setRoute] = useState(null);
   const [routeStatus, setRouteStatus] = useState('idle');
   const [pickingFor, setPickingFor] = useState(null);
+  const [boundary, setBoundary] = useState(null);
 
   const { coords: userCoords, locate, status: geoStatus } = useGeolocation();
 
@@ -126,6 +128,23 @@ export default function App() {
   useEffect(() => {
     loadOfficial();
   }, []);
+
+  // İlçe sınırını çek; gelince haritayı Üsküdar ilçesine sığdır
+  useEffect(() => {
+    fetchBoundary().then(setBoundary).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (boundary?.bbox && mapRef.current) {
+      mapRef.current.fitBounds(
+        [
+          [boundary.bbox[0], boundary.bbox[2]],
+          [boundary.bbox[1], boundary.bbox[3]],
+        ],
+        { padding: [16, 16] }
+      );
+    }
+  }, [boundary]);
 
   function loadOfficial() {
     setOfficialStatus('loading');
@@ -416,7 +435,7 @@ export default function App() {
   }
 
   const counts = useMemo(() => {
-    const c = { total: pins.length, rampa: 0, asansor: 0, calisma: 0 };
+    const c = { total: pins.length, rampa: 0, asansor: 0, calisma: 0, diger: 0 };
     pins.forEach((p) => {
       if (c[p.type] != null) c[p.type] += 1;
     });
@@ -458,6 +477,7 @@ export default function App() {
           route={route}
           routeStart={routeStart?.coords}
           routeEnd={routeEnd?.coords}
+          boundary={boundary}
           onMapReady={(m) => {
             mapRef.current = m;
           }}
@@ -469,7 +489,7 @@ export default function App() {
           onRouteTo={routeTo}
         />
 
-        {reportMode ? (
+        {reportMode && (
           <div className="pointer-events-auto absolute left-1/2 top-3 z-[600] flex max-w-[calc(100%-6rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-ramp/40 bg-surface px-2 py-1.5 shadow-card">
             <span className="px-1 text-xs font-semibold text-ramp">Engel nerede?</span>
             <button
@@ -486,12 +506,6 @@ export default function App() {
             >
               Konumumdan
             </button>
-          </div>
-        ) : (
-          <div className="pointer-events-none absolute left-1/2 top-3 z-[600] flex max-w-[calc(100%-7rem)] -translate-x-1/2 justify-center">
-            <p className="rounded-full border border-border bg-surface px-3.5 py-1.5 text-xs font-semibold text-muted shadow-card">
-              Üsküdar Meydanı · erişilebilirlik katmanı
-            </p>
           </div>
         )}
 

@@ -1,4 +1,4 @@
-import { Accessibility, ArrowUpDown, Construction } from 'lucide-react';
+import { Accessibility, ArrowUpDown, Construction, CircleAlert } from 'lucide-react';
 
 // Üç erişilebilirlik engeli kategorisi. Renk yalnızca grafik öğelerde (ikon,
 // pin, sol çizgi) kullanılır; metinler her zaman tema-mürekkebi rengindedir.
@@ -26,6 +26,14 @@ export const OBSTACLE_TYPES = {
     color: '#CA8A04',
     Icon: Construction,
     desc: 'Yol veya kaldırım çalışması geçişi kapatıyor.',
+  },
+  diger: {
+    key: 'diger',
+    label: 'Diğer Engel',
+    short: 'Diğer',
+    color: '#64748B',
+    Icon: CircleAlert,
+    desc: 'Yukarıdaki türlere uymayan bir erişilebilirlik engeli.',
   },
 };
 

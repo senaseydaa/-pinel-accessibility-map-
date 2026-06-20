@@ -8,9 +8,10 @@ const ENDPOINTS = [
   'https://overpass.kumi.systems/api/interpreter',
   'https://overpass.private.coffee/api/interpreter',
 ];
-const BBOX = '41.019,29.004,41.035,29.026'; // S,W,N,E
+const BBOX = '40.9925,29.0064,41.0779,29.0917'; // Üsküdar ilçesi (S,W,N,E)
+const CENTER = [41.0268, 29.0152]; // Üsküdar Meydanı — cap'te en merkezi noktaları tut
 const TTL = 60 * 60 * 1000; // OSM altyapısı yavaş değişir → 1 sa cache
-const CAP = 160;
+const CAP = 350;
 
 const QUERY = `[out:json][timeout:20];(
   nwr["highway"="elevator"](${BBOX});
@@ -73,8 +74,7 @@ async function runOverpass() {
 export async function getAccessibleInfra() {
   if (cache && Date.now() - cache.at < TTL) return cache.data;
   const json = await runOverpass();
-  const items = [];
-  const byKind = {};
+  const all = [];
   for (const e of json.elements || []) {
     const t = e.tags || {};
     const kind = classify(t);
@@ -82,11 +82,14 @@ export async function getAccessibleInfra() {
     const lat = e.lat ?? e.center?.lat;
     const lng = e.lon ?? e.center?.lon;
     if (!isFinite(lat) || !isFinite(lng)) continue;
-    byKind[kind] = (byKind[kind] || 0) + 1;
-    items.push({ id: `osm-${e.type}-${e.id}`, kind, label: LABELS[kind], name: t.name || t['name:tr'] || null, lat, lng });
-    if (items.length >= CAP) break;
+    all.push({ id: `osm-${e.type}-${e.id}`, kind, label: LABELS[kind], name: t.name || t['name:tr'] || null, lat, lng });
   }
-  const data = { fetchedAt: new Date().toISOString(), count: items.length, byKind, items };
+  // İlçe geneli çok nokta olabilir → merkeze (Meydan) en yakın CAP kadarını tut
+  all.sort((a, b) => (a.lat - CENTER[0]) ** 2 + (a.lng - CENTER[1]) ** 2 - ((b.lat - CENTER[0]) ** 2 + (b.lng - CENTER[1]) ** 2));
+  const items = all.slice(0, CAP);
+  const byKind = {};
+  for (const i of items) byKind[i.kind] = (byKind[i.kind] || 0) + 1;
+  const data = { fetchedAt: new Date().toISOString(), count: items.length, total: all.length, byKind, items };
   cache = { at: Date.now(), data };
   return data;
 }

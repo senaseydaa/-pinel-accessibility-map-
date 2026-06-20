@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, Polygon, useMap, useMapEvents } from 'react-leaflet';
 import { Check, X, Trash2, ArrowUpDown, Navigation } from 'lucide-react';
 import { makeMarkerIcon, makeUserIcon, makeOfficialIcon, makeInfraIcon, makeRoutePoint } from '../lib/mapIcons.js';
 import CategoryBadge from './CategoryBadge.jsx';
@@ -7,6 +7,14 @@ import { getType } from '../data/obstacleTypes.js';
 import { getStatus } from '../lib/status.js';
 import { timeAgo, remaining, daysSince } from '../lib/time.js';
 import { metroDate } from '../lib/metro.js';
+
+// İlçe maskesi için dünya dış halkası (ilçe halkaları "delik" olarak çıkarılır)
+const WORLD_RING = [
+  [-89, -179],
+  [-89, 179],
+  [89, 179],
+  [89, -179],
+];
 
 // Harita örneğini dışarı verir (merkeze pin / konuma uçma için gerekir).
 function MapReady({ onReady }) {
@@ -56,6 +64,7 @@ export default function MapView({
   route,
   routeStart,
   routeEnd,
+  boundary,
   onMapReady,
   onPlace,
   onSelect,
@@ -65,12 +74,24 @@ export default function MapView({
   onRouteTo,
 }) {
   return (
-    <MapContainer center={center} zoom={17} maxZoom={19} className="h-full w-full">
+    <MapContainer center={center} zoom={13} maxZoom={19} className="h-full w-full">
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> katkıda bulunanlar'
         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         maxZoom={19}
       />
+
+      {boundary?.rings?.length > 0 && (
+        <>
+          <Polygon
+            positions={[WORLD_RING, ...boundary.rings]}
+            pathOptions={{ stroke: false, fillColor: '#0b1220', fillOpacity: 0.42, interactive: false }}
+          />
+          {boundary.rings.map((ring, i) => (
+            <Polyline key={`b-${i}`} positions={ring} pathOptions={{ color: '#0F766E', weight: 2, opacity: 0.75, interactive: false }} />
+          ))}
+        </>
+      )}
 
       <MapReady onReady={onMapReady} />
       <ClickCapture active={reportMode} onPlace={onPlace} />

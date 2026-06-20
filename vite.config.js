@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react'
 import { getMetroData } from './netlify/functions/_metroCore.mjs'
 import { getAccessibleInfra } from './netlify/functions/_osmCore.mjs'
 import { getRoute } from './netlify/functions/_routeCore.mjs'
+import { getBoundary } from './netlify/functions/_boundaryCore.mjs'
 
 // Yerel geliştirme için /api/* : prod'daki Netlify Function'larla aynı çekirdeği
 // çalıştırır, böylece dev'de de gerçek veri (CORS'suz) gelir.
@@ -58,6 +59,7 @@ export default defineConfig(({ mode }) => {
       react(),
       devApi('/api/metro', getMetroData),
       devApi('/api/osm', getAccessibleInfra),
+      devApi('/api/boundary', getBoundary),
       routeDevApi(),
     ],
     base: './',
