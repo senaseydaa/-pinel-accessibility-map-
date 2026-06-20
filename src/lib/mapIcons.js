@@ -42,6 +42,26 @@ export function makeMarkerIcon(typeKey, selected = false) {
   });
 }
 
+// Resmî (Metro İstanbul) asansör arızası — topluluk pininden ayırt edilsin diye
+// damla değil KARE plaka; Arıza kırmızı, Revizyon gri (biçim + renk birlikte).
+export function makeOfficialIcon(type, selected = false) {
+  const color = type === 'Revizyon' ? '#64748B' : '#DC2626';
+  const stroke = selected ? '#14181C' : color;
+  return L.divIcon({
+    className: 'pinel-marker',
+    html: `
+    <svg width="30" height="30" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg"
+         style="filter: drop-shadow(0 2px 2px rgba(20,24,28,0.35));">
+      <rect x="3" y="3" width="24" height="24" rx="6" fill="#ffffff" stroke="${stroke}" stroke-width="2"/>
+      <path d="M15 8.4l-2.7 3.3h5.4z" fill="${color}"/>
+      <path d="M15 21.6l2.7-3.3h-5.4z" fill="${color}"/>
+    </svg>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    popupAnchor: [0, -14],
+  });
+}
+
 // "Konumumuz" işareti — marka renginde sade nokta + beyaz halka.
 export function makeUserIcon() {
   return L.divIcon({

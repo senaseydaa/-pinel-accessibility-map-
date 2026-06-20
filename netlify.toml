@@ -1,0 +1,11 @@
+# PINel — Netlify yapı + resmî-veri proxy ayarı
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+# Client her zaman /api/metro çağırır; prod'da bu Netlify Function'a gider.
+[[redirects]]
+  from = "/api/metro"
+  to = "/.netlify/functions/metro"
+  status = 200

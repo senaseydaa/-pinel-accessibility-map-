@@ -5,6 +5,7 @@ import {
   Search,
   Sun,
   Moon,
+  ArrowUpDown,
 } from 'lucide-react';
 import ObstacleCard from './ObstacleCard.jsx';
 import { OBSTACLE_LIST } from '../data/obstacleTypes.js';
@@ -23,6 +24,10 @@ function Stat({ value, label }) {
 export default function Sidebar({
   counts,
   points,
+  official,
+  officialStatus,
+  onRefreshOfficial,
+  onFitOfficial,
   reportMode,
   onToggleReport,
   onDropAtCenter,
@@ -111,6 +116,58 @@ export default function Sidebar({
           <Stat value={counts.rampa} label="Rampa" />
           <Stat value={counts.asansor} label="Asansör" />
           <Stat value={counts.calisma} label="Çalışma" />
+        </div>
+
+        {/* Resmî asansör verisi (Metro İstanbul) */}
+        <div className="shrink-0 px-4 pb-3">
+          <div className="rounded-xl border border-border bg-surface p-3">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
+                <ArrowUpDown size={13} aria-hidden="true" />
+                Resmî asansör durumu
+              </span>
+              <button
+                type="button"
+                onClick={onRefreshOfficial}
+                className="text-[11px] font-semibold text-brand hover:underline"
+              >
+                Yenile
+              </button>
+            </div>
+
+            {officialStatus === 'loading' && (
+              <p className="mt-2 text-xs text-muted">Metro İstanbul verisi yükleniyor…</p>
+            )}
+            {officialStatus === 'error' && (
+              <p className="mt-2 text-xs text-ramp">Resmî veriye şu an ulaşılamıyor.</p>
+            )}
+            {officialStatus === 'success' && official && (
+              <>
+                <p className="mt-2 text-sm font-semibold text-ink">
+                  {official.uskudarCount === 0
+                    ? 'Üsküdar (M5): asansörler çalışıyor ✓'
+                    : `Üsküdar (M5): ${official.uskudarCount} asansör arızalı`}
+                </p>
+                <p className="mt-0.5 font-mono text-[11px] text-muted">
+                  M5 hattı: {official.m5Count} · Ağ geneli: {official.networkTotal} arıza
+                </p>
+                {official.m5Count > 0 && (
+                  <button
+                    type="button"
+                    onClick={onFitOfficial}
+                    className="mt-2 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] font-semibold text-ink hover:bg-surface-2"
+                  >
+                    M5 arızalarını haritada göster
+                  </button>
+                )}
+                <p className="mt-2 text-[10px] leading-snug text-muted">
+                  Kaynak: Metro İstanbul açık verisi ·{' '}
+                  {new Date(official.fetchedAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}{' '}
+                  güncellendi
+                </p>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Arama */}

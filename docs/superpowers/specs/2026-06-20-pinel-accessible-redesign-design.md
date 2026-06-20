@@ -107,3 +107,19 @@ düz pinler olur (parıltısız).
 - Yenilemede veri korunuyor; zaman damgaları gerçek.
 - Mobil ve masaüstünde düzgün görünüyor; açık/koyu tema çalışıyor.
 - `npm run build` hatasız; temel WCAG AA kontrast sağlanıyor.
+
+---
+
+## Ek (2026-06-20): Resmî veri entegrasyonu
+
+İlk (asgari, salt-okunur) backend dokunuşu eklendi: Metro İstanbul'un açık,
+anahtarsız `GetFaultyEquipmentDetails` API'si küçük bir proxy üzerinden çekilir
+(CORS nedeniyle tarayıcıdan doğrudan çağrılamaz). Aynı çekirdek kod hem yerelde
+(Vite dev middleware) hem prod'da (Netlify Function `/api/metro`) çalışır.
+
+- Üsküdar (istasyon 122, M5) asansör durumu + Üsküdar'ın hattı M5'teki gerçek
+  arızalar haritada **kare** işaretçilerle (topluluk damlalarından ayrı; Arıza
+  kırmızı / Revizyon gri) gösterilir; salt-okunur.
+- Boşluk: Marmaray (TCDD) ve vapurlarda açık asansör verisi yok → elle/toplulukla.
+- Not: GitHub Pages statiktir; canlı veri yalnızca Netlify (veya yerel dev) ile
+  çalışır.

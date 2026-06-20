@@ -9,6 +9,7 @@ import { useGeolocation } from './hooks/useGeolocation.js';
 import { getType } from './data/obstacleTypes.js';
 import { distanceMeters } from './lib/geo.js';
 import { REFUTE_THRESHOLD, MERGE_RADIUS_M } from './lib/status.js';
+import { fetchMetro } from './lib/metro.js';
 
 const MEYDAN = [41.0268, 29.0152];
 const LIFETIME_MIN = 240; // Bildirimler 4 saat canlı kalır; "Hâlâ duruyor" yeniler.
@@ -69,6 +70,8 @@ export default function App() {
   const [toasts, setToasts] = useState([]);
   const [now, setNow] = useState(() => Date.now());
   const [sheetExpanded, setSheetExpanded] = useState(false);
+  const [official, setOfficial] = useState(null);
+  const [officialStatus, setOfficialStatus] = useState('idle');
 
   const { coords: userCoords, locate, status: geoStatus } = useGeolocation();
 
@@ -103,6 +106,32 @@ export default function App() {
     if (pin) focusPin(pin);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Resmî Metro İstanbul verisini açılışta çek
+  useEffect(() => {
+    loadOfficial();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function loadOfficial() {
+    setOfficialStatus('loading');
+    fetchMetro()
+      .then((data) => {
+        setOfficial(data);
+        setOfficialStatus('success');
+      })
+      .catch(() => setOfficialStatus('error'));
+  }
+
+  function fitOfficial() {
+    const items = official?.items || [];
+    if (!items.length || !mapRef.current) return;
+    mapRef.current.fitBounds(
+      items.map((i) => [i.lat, i.lng]),
+      { padding: [48, 48], maxZoom: 15 }
+    );
+    setSheetExpanded(false);
+  }
 
   function showToast(message, type = 'success') {
     const id = ++toastId.current;
@@ -312,6 +341,7 @@ export default function App() {
           now={now}
           votes={votes}
           voterId={voterId}
+          officialItems={official?.items || []}
           onMapReady={(m) => {
             mapRef.current = m;
           }}
@@ -361,6 +391,10 @@ export default function App() {
         <Sidebar
           counts={counts}
           points={points}
+          official={official}
+          officialStatus={officialStatus}
+          onRefreshOfficial={loadOfficial}
+          onFitOfficial={fitOfficial}
           reportMode={reportMode}
           onToggleReport={toggleReport}
           onDropAtCenter={dropPinAtCenter}

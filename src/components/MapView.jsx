@@ -1,11 +1,12 @@
 import { useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
-import { Check, X, Trash2 } from 'lucide-react';
-import { makeMarkerIcon, makeUserIcon } from '../lib/mapIcons.js';
+import { Check, X, Trash2, ArrowUpDown } from 'lucide-react';
+import { makeMarkerIcon, makeUserIcon, makeOfficialIcon } from '../lib/mapIcons.js';
 import CategoryBadge from './CategoryBadge.jsx';
 import { getType } from '../data/obstacleTypes.js';
 import { getStatus } from '../lib/status.js';
 import { timeAgo, remaining } from '../lib/time.js';
+import { metroDate } from '../lib/metro.js';
 
 // Harita örneğini dışarı verir (merkeze pin / konuma uçma için gerekir).
 function MapReady({ onReady }) {
@@ -50,6 +51,7 @@ export default function MapView({
   now,
   votes,
   voterId,
+  officialItems = [],
   onMapReady,
   onPlace,
   onSelect,
@@ -76,6 +78,26 @@ export default function MapView({
           </Popup>
         </Marker>
       )}
+
+      {officialItems.map((o) => (
+        <Marker key={o.id} position={[o.lat, o.lng]} icon={makeOfficialIcon(o.type)}>
+          <Popup>
+            <div className="min-w-[12rem]">
+              <span className="flex items-center gap-1.5 font-semibold text-ink">
+                <ArrowUpDown size={15} style={{ color: o.type === 'Revizyon' ? '#64748B' : '#DC2626' }} aria-hidden="true" />
+                Asansör · {o.type}
+              </span>
+              <p className="mt-1.5 text-[13px] text-ink">
+                {o.stationName} <span className="text-muted">({o.lineName})</span>
+              </p>
+              {o.description && <p className="font-mono text-[11px] text-muted">{o.description}</p>}
+              <p className="mt-1.5 text-[11px] text-muted">
+                {metroDate(o.date)} · Kaynak: Metro İstanbul (resmî)
+              </p>
+            </div>
+          </Popup>
+        </Marker>
+      ))}
 
       {pins.map((pin) => {
         const rem = remaining(pin.expiresAt, now);
