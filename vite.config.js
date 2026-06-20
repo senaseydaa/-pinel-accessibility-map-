@@ -5,6 +5,7 @@ import { getMetroData } from './netlify/functions/_metroCore.mjs'
 import { getAccessibleInfra } from './netlify/functions/_osmCore.mjs'
 import { getRoute } from './netlify/functions/_routeCore.mjs'
 import { getBoundary } from './netlify/functions/_boundaryCore.mjs'
+import { getGeocode } from './netlify/functions/_geocodeCore.mjs'
 
 // Yerel geliştirme için /api/* : prod'daki Netlify Function'larla aynı çekirdeği
 // çalıştırır, böylece dev'de de gerçek veri (CORS'suz) gelir.
@@ -15,6 +16,27 @@ function devApi(path, fn) {
       server.middlewares.use(path, async (_req, res) => {
         try {
           const data = await fn()
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end(JSON.stringify(data))
+        } catch (e) {
+          res.statusCode = 502
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ error: String(e?.message || e) }))
+        }
+      })
+    },
+  }
+}
+
+// Query-param'lı /api/geocode?text=...
+function geocodeDevApi() {
+  return {
+    name: 'dev-api-geocode',
+    configureServer(server) {
+      server.middlewares.use('/api/geocode', async (req, res) => {
+        try {
+          const text = new URL(req.originalUrl || req.url, 'http://localhost').searchParams.get('text') || ''
+          const data = await getGeocode(text)
           res.setHeader('Content-Type', 'application/json; charset=utf-8')
           res.end(JSON.stringify(data))
         } catch (e) {
@@ -60,6 +82,7 @@ export default defineConfig(({ mode }) => {
       devApi('/api/metro', getMetroData),
       devApi('/api/osm', getAccessibleInfra),
       devApi('/api/boundary', getBoundary),
+      geocodeDevApi(),
       routeDevApi(),
     ],
     base: './',

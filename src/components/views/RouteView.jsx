@@ -1,15 +1,17 @@
-import { LocateFixed, Navigation, MapPin, Crosshair, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { LocateFixed, Crosshair, X, Search, MapPin } from 'lucide-react';
 import { fmtDuration, fmtDistance } from '../../lib/route.js';
+import { fetchGeocode } from '../../lib/geocode.js';
 
-const ROUTE_PRESETS = [
+const QUICK = [
   { name: 'Vapur İskelesi', coords: [41.0272, 29.0156] },
-  { name: 'Marmaray / M5 Üsküdar', coords: [41.0264, 29.0148] },
-  { name: 'Üsküdar Meydanı', coords: [41.0268, 29.0152] },
-  { name: 'Mihrimah Sultan Camii', coords: [41.0261, 29.0162] },
+  { name: 'Marmaray Üsküdar', coords: [41.0261, 29.0143] },
 ];
 
-// "Rota" görünümü — engel-farkında erişilebilir rota. Başlangıç/hedef seç, rota bul,
-// adım listesini oku (ekran okuyucu + klavye erişilebilir).
+const chip = 'chip border-border bg-surface text-muted hover:text-ink';
+
+// "Rota" görünümü — engel-farkında erişilebilir rota. Başlangıç → hedef kartı,
+// yazınca öneri getiren adres arama, erişilebilir adım listesi.
 export default function RouteView({
   start,
   end,
@@ -24,51 +26,118 @@ export default function RouteView({
   onCompute,
   onClear,
 }) {
+  const [q, setQ] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [open, setOpen] = useState(false);
+  const timer = useRef();
+
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  function onQueryChange(v) {
+    setQ(v);
+    clearTimeout(timer.current);
+    if (v.trim().length < 2) {
+      setSuggestions([]);
+      setOpen(false);
+      return;
+    }
+    timer.current = setTimeout(() => {
+      fetchGeocode(v)
+        .then((r) => {
+          setSuggestions(r.suggestions || []);
+          setOpen(true);
+        })
+        .catch(() => {
+          setSuggestions([]);
+          setOpen(false);
+        });
+    }, 250);
+  }
+
+  function pick(s) {
+    onSetPreset({ coords: s.coords, name: s.label });
+    setQ(s.label);
+    setOpen(false);
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 px-4 pt-3">
         <h2 className="text-sm font-bold text-ink">Erişilebilir rota</h2>
         <p className="mt-0.5 text-xs text-muted">Tekerlekli sandalye profili · bildirilen engellerden kaçınır</p>
 
-        {/* Başlangıç */}
-        <div className="mt-3">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">Başlangıç</span>
-          <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-ink">
-            <MapPin size={14} className="text-brand" aria-hidden="true" />
-            {start.label}
-          </p>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            <button type="button" onClick={onUseLocation} className="chip border-border bg-surface text-muted hover:text-ink">
+        <div className="mt-3 rounded-xl border border-border bg-surface p-3">
+          {/* Başlangıç */}
+          <div className="flex items-center gap-2.5">
+            <span className="h-3 w-3 shrink-0 rounded-full border-2 border-brand" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{start.label}</span>
+          </div>
+          <div className="ml-[5px] flex flex-wrap gap-1.5 border-l-2 border-dashed border-border py-2 pl-4">
+            <button type="button" onClick={onUseLocation} className={chip}>
               <LocateFixed size={13} aria-hidden="true" /> Konumum
             </button>
-            <button type="button" onClick={onUseMeydan} className="chip border-border bg-surface text-muted hover:text-ink">
+            <button type="button" onClick={onUseMeydan} className={chip}>
               <Crosshair size={13} aria-hidden="true" /> Meydan
             </button>
             <button
               type="button"
               onClick={onPickStart}
               aria-pressed={pickingFor === 'start'}
-              className={`chip ${pickingFor === 'start' ? 'border-brand bg-brand text-white' : 'border-border bg-surface text-muted hover:text-ink'}`}
+              className={pickingFor === 'start' ? 'chip border-brand bg-brand text-white' : chip}
             >
               Haritadan
             </button>
           </div>
-        </div>
 
-        {/* Hedef */}
-        <div className="mt-3">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">Hedef</span>
-          <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-ink">
-            <Navigation size={14} className="text-ramp" aria-hidden="true" />
-            {end ? end.label : <span className="font-normal text-muted">seçilmedi</span>}
-          </p>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {ROUTE_PRESETS.map((p) => (
+          {/* Hedef */}
+          <div className="flex items-center gap-2.5">
+            <span className="h-3 w-3 shrink-0 rounded-full bg-ramp" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
+              {end ? end.label : <span className="font-normal text-muted">Hedef seçin</span>}
+            </span>
+          </div>
+
+          {/* Yazınca-çıkan adres arama */}
+          <div className="relative mt-2 pl-[26px]">
+            <Search size={15} className="pointer-events-none absolute left-[38px] top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
+            <input
+              type="search"
+              value={q}
+              onChange={(e) => onQueryChange(e.target.value)}
+              onFocus={() => suggestions.length && setOpen(true)}
+              placeholder="Yer ara (ör. Marmaray, hastane…)"
+              aria-label="Hedef ara"
+              className="w-full rounded-lg border border-border bg-surface py-2 pl-9 pr-3 text-sm text-ink placeholder:text-muted/70"
+            />
+            {open && suggestions.length > 0 && (
+              <ul className="absolute left-[26px] right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-lg border border-border bg-surface shadow-pop">
+                {suggestions.map((s, i) => (
+                  <li key={i}>
+                    <button
+                      type="button"
+                      onClick={() => pick(s)}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-ink hover:bg-surface-2"
+                    >
+                      <MapPin size={14} className="shrink-0 text-muted" aria-hidden="true" />
+                      <span className="min-w-0 truncate">{s.label}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="mt-2 flex flex-wrap gap-1.5 pl-[26px]">
+            {QUICK.map((p) => (
               <button
                 key={p.name}
                 type="button"
-                onClick={() => onSetPreset(p)}
-                className="chip border-border bg-surface text-muted hover:text-ink"
+                onClick={() => {
+                  onSetPreset(p);
+                  setQ(p.name);
+                  setOpen(false);
+                }}
+                className={chip}
               >
                 {p.name}
               </button>
@@ -77,7 +146,7 @@ export default function RouteView({
               type="button"
               onClick={onPickDest}
               aria-pressed={pickingFor === 'dest'}
-              className={`chip ${pickingFor === 'dest' ? 'border-brand bg-brand text-white' : 'border-border bg-surface text-muted hover:text-ink'}`}
+              className={pickingFor === 'dest' ? 'chip border-brand bg-brand text-white' : chip}
             >
               Haritadan
             </button>
@@ -103,7 +172,6 @@ export default function RouteView({
         {routeStatus === 'error' && <p className="mt-2 text-sm text-ramp">Rota bulunamadı. Başka nokta deneyin.</p>}
       </div>
 
-      {/* Sonuç */}
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         {routeStatus === 'success' && route && (
           <>

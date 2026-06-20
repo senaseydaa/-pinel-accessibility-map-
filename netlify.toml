@@ -24,3 +24,8 @@
   from = "/api/boundary"
   to = "/.netlify/functions/boundary"
   status = 200
+
+[[redirects]]
+  from = "/api/geocode"
+  to = "/.netlify/functions/geocode"
+  status = 200
