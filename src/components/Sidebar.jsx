@@ -35,11 +35,11 @@ function TabBtn({ Icon, label, active, accent, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`flex flex-1 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-semibold transition-colors ${style}`}
+      className={`flex flex-1 flex-col items-center gap-1.5 rounded-xl px-1 py-2.5 text-[11px] font-semibold transition-colors ${style}`}
       aria-label={label}
       aria-pressed={active}
     >
-      <Icon size={18} aria-hidden="true" />
+      <Icon size={21} aria-hidden="true" />
       {label}
     </button>
   );
@@ -99,13 +99,13 @@ export default function Sidebar({
           <button
             type="button"
             onClick={onToggleSheet}
-            className="flex w-full justify-center pb-1 pt-2.5"
+            className="flex w-full justify-center pb-2 pt-3.5"
             aria-expanded={sheetExpanded}
             aria-label={sheetExpanded ? 'Paneli küçült' : 'Paneli genişlet'}
           >
-            <span className="h-1 w-10 rounded-full bg-border" aria-hidden="true" />
+            <span className="h-1.5 w-11 rounded-full bg-border" aria-hidden="true" />
           </button>
-          <div className="flex items-stretch gap-1 px-3 pb-2">
+          <div className="flex items-stretch gap-2 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-0.5">
             <TabBtn Icon={Plus} label="Bildir" accent active={reportMode} onClick={onToggleReport} />
             {VIEWS.map((v) => (
               <TabBtn key={v.key} Icon={v.Icon} label={v.label === 'Bildirimler' ? 'Liste' : v.label === 'Resmî durum' ? 'Resmî' : v.label} active={activeView === v.key} onClick={() => onView(v.key)} />
