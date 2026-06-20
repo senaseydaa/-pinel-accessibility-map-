@@ -18,6 +18,11 @@ export function remaining(expiresAtIso, now = Date.now()) {
   return { min, expired: ms <= 0, label: h ? `${h} sa ${m} dk` : `${m} dk` };
 }
 
+export function daysSince(iso, now = Date.now()) {
+  if (!iso) return 0;
+  return Math.max(0, Math.floor((now - new Date(iso).getTime()) / 86400000));
+}
+
 export function formatClock(iso) {
   return new Date(iso).toLocaleString('tr-TR', {
     day: 'numeric',

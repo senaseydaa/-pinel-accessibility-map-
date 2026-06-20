@@ -5,7 +5,7 @@ import { makeMarkerIcon, makeUserIcon, makeOfficialIcon } from '../lib/mapIcons.
 import CategoryBadge from './CategoryBadge.jsx';
 import { getType } from '../data/obstacleTypes.js';
 import { getStatus } from '../lib/status.js';
-import { timeAgo, remaining } from '../lib/time.js';
+import { timeAgo, remaining, daysSince } from '../lib/time.js';
 import { metroDate } from '../lib/metro.js';
 
 // Harita örneğini dışarı verir (merkeze pin / konuma uçma için gerekir).
@@ -79,25 +79,29 @@ export default function MapView({
         </Marker>
       )}
 
-      {officialItems.map((o) => (
-        <Marker key={o.id} position={[o.lat, o.lng]} icon={makeOfficialIcon(o.type)}>
-          <Popup>
-            <div className="min-w-[12rem]">
-              <span className="flex items-center gap-1.5 font-semibold text-ink">
-                <ArrowUpDown size={15} style={{ color: o.type === 'Revizyon' ? '#64748B' : '#DC2626' }} aria-hidden="true" />
-                Asansör · {o.type}
-              </span>
-              <p className="mt-1.5 text-[13px] text-ink">
-                {o.stationName} <span className="text-muted">({o.lineName})</span>
-              </p>
-              {o.description && <p className="font-mono text-[11px] text-muted">{o.description}</p>}
-              <p className="mt-1.5 text-[11px] text-muted">
-                {metroDate(o.date)} · Kaynak: Metro İstanbul (resmî)
-              </p>
-            </div>
-          </Popup>
-        </Marker>
-      ))}
+      {officialItems.map((o) => {
+        const days = daysSince(o.date, now);
+        return (
+          <Marker key={o.id} position={[o.lat, o.lng]} icon={makeOfficialIcon(o.group, o.type)}>
+            <Popup>
+              <div className="min-w-[12rem]">
+                <span className="flex items-center gap-1.5 font-semibold text-ink">
+                  <ArrowUpDown size={15} style={{ color: o.type === 'Revizyon' ? '#64748B' : '#DC2626' }} aria-hidden="true" />
+                  {o.group === 'merdiven' ? 'Yürüyen Merdiven' : 'Asansör'} · {o.type}
+                </span>
+                <p className="mt-1.5 text-[13px] text-ink">
+                  {o.stationName} <span className="text-muted">({o.lineName})</span>
+                </p>
+                {o.description && <p className="font-mono text-[11px] text-muted">{o.description}</p>}
+                <p className="mt-1.5 text-[11px] text-muted">
+                  {metroDate(o.date)}
+                  {days > 0 ? ` · ${days} gündür` : ''} · Kaynak: Metro İstanbul (resmî)
+                </p>
+              </div>
+            </Popup>
+          </Marker>
+        );
+      })}
 
       {pins.map((pin) => {
         const rem = remaining(pin.expiresAt, now);

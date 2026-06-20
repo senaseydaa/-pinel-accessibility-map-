@@ -124,7 +124,7 @@ export default function Sidebar({
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
                 <ArrowUpDown size={13} aria-hidden="true" />
-                Resmî asansör durumu
+                Resmî erişim durumu
               </span>
               <button
                 type="button"
@@ -143,24 +143,49 @@ export default function Sidebar({
             )}
             {officialStatus === 'success' && official && (
               <>
-                <p className="mt-2 text-sm font-semibold text-ink">
-                  {official.uskudarCount === 0
-                    ? 'Üsküdar (M5): asansörler çalışıyor ✓'
-                    : `Üsküdar (M5): ${official.uskudarCount} asansör arızalı`}
+                <p className={`mt-2 text-sm font-bold ${official.uskudar.accessible ? 'text-brand' : 'text-ramp'}`}>
+                  {official.uskudar.accessible
+                    ? 'Üsküdar: engelli erişimine uygun ✓'
+                    : `Üsküdar: erişim kısıtlı ⚠ (${official.uskudar.liftFaults} asansör arızalı)`}
                 </p>
-                <p className="mt-0.5 font-mono text-[11px] text-muted">
-                  M5 hattı: {official.m5Count} · Ağ geneli: {official.networkTotal} arıza
+
+                <div className="mt-1.5 space-y-0.5 font-mono text-[11px] text-muted">
+                  <p>
+                    Asansör: {official.uskudar.liftOk}/{official.uskudar.liftTotal} çalışıyor
+                    {official.uskudar.liftFaults > 0 ? ` · ${official.uskudar.liftFaults} arıza` : ''}
+                  </p>
+                  <p>
+                    Yürüyen merdiven: {official.uskudar.escOk}/{official.uskudar.escTotal} çalışıyor
+                    {official.uskudar.escFaults > 0 ? ` · ${official.uskudar.escFaults} arıza` : ''}
+                  </p>
+                </div>
+
+                <p className={`mt-1.5 text-[11px] ${official.service ? 'text-ramp' : 'text-muted'}`}>
+                  {official.service ? `M5 aksama: ${official.service.description}` : 'M5 hattı: normal çalışıyor ✓'}
                 </p>
+
                 {official.m5Count > 0 && (
                   <button
                     type="button"
                     onClick={onFitOfficial}
                     className="mt-2 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] font-semibold text-ink hover:bg-surface-2"
                   >
-                    M5 arızalarını haritada göster
+                    M5 hattındaki {official.m5Count} arızayı haritada göster
                   </button>
                 )}
-                <p className="mt-2 text-[10px] leading-snug text-muted">
+
+                <p className="mt-2 flex items-center gap-2 text-[10px] text-muted">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="inline-block h-2.5 w-2.5 rounded-[3px] border-2" style={{ borderColor: '#DC2626' }} />
+                    Arıza
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="inline-block h-2.5 w-2.5 rounded-[3px] border-2" style={{ borderColor: '#64748B' }} />
+                    Revizyon
+                  </span>
+                </p>
+
+                <p className="mt-1.5 text-[10px] leading-snug text-muted">
                   Kaynak: Metro İstanbul açık verisi ·{' '}
                   {new Date(official.fetchedAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}{' '}
                   güncellendi
