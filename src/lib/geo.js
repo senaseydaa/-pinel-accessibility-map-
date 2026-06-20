@@ -1,3 +1,23 @@
+// Nokta bir halkanın (ring) içinde mi — ışın atma (ray casting). pt=[lat,lng].
+function pointInRing(pt, ring) {
+  const x = pt[1];
+  const y = pt[0];
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][1];
+    const yi = ring[i][0];
+    const xj = ring[j][1];
+    const yj = ring[j][0];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+// Nokta, halkalardan herhangi birinin içinde mi (çok parçalı sınır için).
+export function pointInRings(pt, rings) {
+  return rings.some((r) => pointInRing(pt, r));
+}
+
 // İki koordinat arası mesafe (metre) — yakındaki mükerrer bildirimleri bulmak için.
 export function distanceMeters(a, b) {
   const R = 6371000;

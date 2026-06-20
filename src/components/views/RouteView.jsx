@@ -10,8 +10,75 @@ const QUICK = [
 
 const chip = 'chip border-border bg-surface text-muted hover:text-ink';
 
-// "Rota" görünümü — engel-farkında erişilebilir rota. Başlangıç → hedef kartı,
-// yazınca öneri getiren adres arama, erişilebilir adım listesi.
+// Yazınca öneri getiren yer arama alanı (başlangıç ve hedef için ortak).
+function SearchField({ placeholder, onSelect }) {
+  const [q, setQ] = useState('');
+  const [sug, setSug] = useState([]);
+  const [open, setOpen] = useState(false);
+  const timer = useRef();
+
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  function change(v) {
+    setQ(v);
+    clearTimeout(timer.current);
+    if (v.trim().length < 2) {
+      setSug([]);
+      setOpen(false);
+      return;
+    }
+    timer.current = setTimeout(() => {
+      fetchGeocode(v)
+        .then((r) => {
+          setSug(r.suggestions || []);
+          setOpen(true);
+        })
+        .catch(() => {
+          setSug([]);
+          setOpen(false);
+        });
+    }, 250);
+  }
+
+  function pick(s) {
+    onSelect(s);
+    setQ(s.label);
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative">
+      <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
+      <input
+        type="search"
+        value={q}
+        onChange={(e) => change(e.target.value)}
+        onFocus={() => sug.length && setOpen(true)}
+        placeholder={placeholder}
+        aria-label={placeholder}
+        className="w-full rounded-lg border border-border bg-surface py-2 pl-9 pr-3 text-sm text-ink placeholder:text-muted/70"
+      />
+      {open && sug.length > 0 && (
+        <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-lg border border-border bg-surface shadow-pop">
+          {sug.map((s, i) => (
+            <li key={i}>
+              <button
+                type="button"
+                onClick={() => pick(s)}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-ink hover:bg-surface-2"
+              >
+                <MapPin size={14} className="shrink-0 text-muted" aria-hidden="true" />
+                <span className="min-w-0 truncate">{s.label}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// "Rota" görünümü — engel-farkında erişilebilir rota. Başlangıç ve hedef aranabilir.
 export default function RouteView({
   start,
   end,
@@ -22,44 +89,11 @@ export default function RouteView({
   onUseMeydan,
   onPickStart,
   onPickDest,
+  onSetStart,
   onSetPreset,
   onCompute,
   onClear,
 }) {
-  const [q, setQ] = useState('');
-  const [suggestions, setSuggestions] = useState([]);
-  const [open, setOpen] = useState(false);
-  const timer = useRef();
-
-  useEffect(() => () => clearTimeout(timer.current), []);
-
-  function onQueryChange(v) {
-    setQ(v);
-    clearTimeout(timer.current);
-    if (v.trim().length < 2) {
-      setSuggestions([]);
-      setOpen(false);
-      return;
-    }
-    timer.current = setTimeout(() => {
-      fetchGeocode(v)
-        .then((r) => {
-          setSuggestions(r.suggestions || []);
-          setOpen(true);
-        })
-        .catch(() => {
-          setSuggestions([]);
-          setOpen(false);
-        });
-    }, 250);
-  }
-
-  function pick(s) {
-    onSetPreset({ coords: s.coords, name: s.label });
-    setQ(s.label);
-    setOpen(false);
-  }
-
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 px-4 pt-3">
@@ -72,21 +106,24 @@ export default function RouteView({
             <span className="h-3 w-3 shrink-0 rounded-full border-2 border-brand" aria-hidden="true" />
             <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{start.label}</span>
           </div>
-          <div className="ml-[5px] flex flex-wrap gap-1.5 border-l-2 border-dashed border-border py-2 pl-4">
-            <button type="button" onClick={onUseLocation} className={chip}>
-              <LocateFixed size={13} aria-hidden="true" /> Konumum
-            </button>
-            <button type="button" onClick={onUseMeydan} className={chip}>
-              <Crosshair size={13} aria-hidden="true" /> Meydan
-            </button>
-            <button
-              type="button"
-              onClick={onPickStart}
-              aria-pressed={pickingFor === 'start'}
-              className={pickingFor === 'start' ? 'chip border-brand bg-brand text-white' : chip}
-            >
-              Haritadan
-            </button>
+          <div className="ml-[5px] space-y-2 border-l-2 border-dashed border-border py-2 pl-4">
+            <SearchField placeholder="Başlangıç ara…" onSelect={(s) => onSetStart({ coords: s.coords, name: s.label })} />
+            <div className="flex flex-wrap gap-1.5">
+              <button type="button" onClick={onUseLocation} className={chip}>
+                <LocateFixed size={13} aria-hidden="true" /> Konumum
+              </button>
+              <button type="button" onClick={onUseMeydan} className={chip}>
+                <Crosshair size={13} aria-hidden="true" /> Meydan
+              </button>
+              <button
+                type="button"
+                onClick={onPickStart}
+                aria-pressed={pickingFor === 'start'}
+                className={pickingFor === 'start' ? 'chip border-brand bg-brand text-white' : chip}
+              >
+                Haritadan
+              </button>
+            </div>
           </div>
 
           {/* Hedef */}
@@ -96,60 +133,23 @@ export default function RouteView({
               {end ? end.label : <span className="font-normal text-muted">Hedef seçin</span>}
             </span>
           </div>
-
-          {/* Yazınca-çıkan adres arama */}
-          <div className="relative mt-2 pl-[26px]">
-            <Search size={15} className="pointer-events-none absolute left-[38px] top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
-            <input
-              type="search"
-              value={q}
-              onChange={(e) => onQueryChange(e.target.value)}
-              onFocus={() => suggestions.length && setOpen(true)}
-              placeholder="Yer ara (ör. Marmaray, hastane…)"
-              aria-label="Hedef ara"
-              className="w-full rounded-lg border border-border bg-surface py-2 pl-9 pr-3 text-sm text-ink placeholder:text-muted/70"
-            />
-            {open && suggestions.length > 0 && (
-              <ul className="absolute left-[26px] right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-lg border border-border bg-surface shadow-pop">
-                {suggestions.map((s, i) => (
-                  <li key={i}>
-                    <button
-                      type="button"
-                      onClick={() => pick(s)}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-ink hover:bg-surface-2"
-                    >
-                      <MapPin size={14} className="shrink-0 text-muted" aria-hidden="true" />
-                      <span className="min-w-0 truncate">{s.label}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div className="mt-2 flex flex-wrap gap-1.5 pl-[26px]">
-            {QUICK.map((p) => (
+          <div className="ml-[5px] space-y-2 pl-4">
+            <SearchField placeholder="Hedef ara… (ör. Marmaray, hastane)" onSelect={(s) => onSetPreset({ coords: s.coords, name: s.label })} />
+            <div className="flex flex-wrap gap-1.5">
+              {QUICK.map((p) => (
+                <button key={p.name} type="button" onClick={() => onSetPreset(p)} className={chip}>
+                  {p.name}
+                </button>
+              ))}
               <button
-                key={p.name}
                 type="button"
-                onClick={() => {
-                  onSetPreset(p);
-                  setQ(p.name);
-                  setOpen(false);
-                }}
-                className={chip}
+                onClick={onPickDest}
+                aria-pressed={pickingFor === 'dest'}
+                className={pickingFor === 'dest' ? 'chip border-brand bg-brand text-white' : chip}
               >
-                {p.name}
+                Haritadan
               </button>
-            ))}
-            <button
-              type="button"
-              onClick={onPickDest}
-              aria-pressed={pickingFor === 'dest'}
-              className={pickingFor === 'dest' ? 'chip border-brand bg-brand text-white' : chip}
-            >
-              Haritadan
-            </button>
+            </div>
           </div>
         </div>
 
@@ -204,7 +204,7 @@ export default function RouteView({
           </>
         )}
         {routeStatus === 'idle' && (
-          <p className="text-sm text-muted">Bir hedef seçip “Rota bul” deyin. Rota, bildirilen engellerin etrafından geçer.</p>
+          <p className="text-sm text-muted">Başlangıç ve hedef seçip “Rota bul” deyin. Rota, bildirilen engellerin etrafından geçer.</p>
         )}
       </div>
     </div>

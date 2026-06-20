@@ -39,7 +39,7 @@ export default function InfraView({ infra, infraStatus, onRefresh, showInfra, on
             Yenile
           </button>
         </div>
-        <p className="mt-0.5 text-xs text-muted">OpenStreetMap · Üsküdar Meydanı çevresi</p>
+        <p className="mt-0.5 text-xs text-muted">OpenStreetMap · konumunuz çevresi (gezdikçe güncellenir)</p>
 
         <button type="button" onClick={onToggleShow} aria-pressed={showInfra} className={`mt-2 w-full ${showInfra ? 'btn-primary' : 'btn-ghost'}`}>
           {showInfra ? 'Haritada gösteriliyor ✓' : 'Haritada göster'}

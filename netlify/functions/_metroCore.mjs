@@ -4,6 +4,7 @@
 
 const BASE = 'https://api.ibb.gov.tr/MetroIstanbul/api/MetroMobile/V2';
 const USKUDAR_ID = 122; // Üsküdar (M5)
+const ASIAN_LINES = ['M4', 'M5', 'M8', 'T3']; // Anadolu yakası metro/tramvay hatları
 const TTL = 60 * 1000; // arıza/servis 60 sn cache
 const STATION_TTL = 6 * 60 * 60 * 1000; // istasyon listesi 6 sa cache
 
@@ -88,7 +89,7 @@ export async function getMetroData() {
   ]) {
     for (const e of equipments) {
       const isU = e.StationId === USKUDAR_ID;
-      if (e.LineName !== 'M5' && !isU) continue;
+      if (!ASIAN_LINES.includes(e.LineName) && !isU) continue;
       const st = stations[e.StationId];
       if (!st || !isFinite(st.lat) || !isFinite(st.lng)) continue;
       if (isU) group === 'asansor' ? liftFaults++ : escFaults++;
@@ -110,8 +111,8 @@ export async function getMetroData() {
     }
   }
 
-  const m5 = services.find((s) => s.LineName === 'M5' && s.Description);
-  const service = m5 ? { description: m5.Description, updateDate: m5.UpdateDate } : null;
+  const dis = services.find((s) => ASIAN_LINES.includes(s.LineName) && s.Description);
+  const service = dis ? { lineName: dis.LineName, description: dis.Description, updateDate: dis.UpdateDate } : null;
 
   return {
     fetchedAt: new Date().toISOString(),
@@ -125,7 +126,7 @@ export async function getMetroData() {
       escOk: Math.max(0, usk.esc - escFaults),
       accessible: liftFaults === 0, // step-free yol asansördür
     },
-    m5Count: items.length,
+    lineCount: items.length, // Anadolu yakası hatlarındaki arıza sayısı
     items,
     service,
   };

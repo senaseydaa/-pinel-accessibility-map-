@@ -1,9 +1,10 @@
 import { getAccessibleInfra } from './_osmCore.mjs';
 
 // Prod (Netlify) proxy: Overpass'ı sunucu tarafında çeker, temiz JSON döner.
-export const handler = async () => {
+export const handler = async (event) => {
   try {
-    const data = await getAccessibleInfra();
+    const q = event.queryStringParameters || {};
+    const data = await getAccessibleInfra({ lat: q.lat, lng: q.lng, radius: q.radius });
     return {
       statusCode: 200,
       headers: {

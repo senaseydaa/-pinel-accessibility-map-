@@ -4,7 +4,6 @@ import react from '@vitejs/plugin-react'
 import { getMetroData } from './netlify/functions/_metroCore.mjs'
 import { getAccessibleInfra } from './netlify/functions/_osmCore.mjs'
 import { getRoute } from './netlify/functions/_routeCore.mjs'
-import { getBoundary } from './netlify/functions/_boundaryCore.mjs'
 import { getGeocode } from './netlify/functions/_geocodeCore.mjs'
 
 // Yerel geliştirme için /api/* : prod'daki Netlify Function'larla aynı çekirdeği
@@ -28,15 +27,15 @@ function devApi(path, fn) {
   }
 }
 
-// Query-param'lı /api/geocode?text=...
-function geocodeDevApi() {
+// Query-param'lı dev middleware (searchParams → handler)
+function queryDevApi(path, run) {
   return {
-    name: 'dev-api-geocode',
+    name: `dev-api${path.replace(/\//g, '-')}`,
     configureServer(server) {
-      server.middlewares.use('/api/geocode', async (req, res) => {
+      server.middlewares.use(path, async (req, res) => {
         try {
-          const text = new URL(req.originalUrl || req.url, 'http://localhost').searchParams.get('text') || ''
-          const data = await getGeocode(text)
+          const sp = new URL(req.originalUrl || req.url, 'http://localhost').searchParams
+          const data = await run(sp)
           res.setHeader('Content-Type', 'application/json; charset=utf-8')
           res.end(JSON.stringify(data))
         } catch (e) {
@@ -80,9 +79,10 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       devApi('/api/metro', getMetroData),
-      devApi('/api/osm', getAccessibleInfra),
-      devApi('/api/boundary', getBoundary),
-      geocodeDevApi(),
+      queryDevApi('/api/osm', (sp) =>
+        getAccessibleInfra({ lat: sp.get('lat'), lng: sp.get('lng'), radius: sp.get('radius') })
+      ),
+      queryDevApi('/api/geocode', (sp) => getGeocode(sp.get('text') || '')),
       routeDevApi(),
     ],
     base: './',

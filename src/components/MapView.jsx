@@ -37,6 +37,12 @@ function ClickCapture({ active, onPlace }) {
   return null;
 }
 
+// Harita hareketi bitince haber ver (konuma göre altyapı yükleme için).
+function MoveWatch({ onMove }) {
+  useMapEvents({ moveend: () => onMove?.() });
+  return null;
+}
+
 // Programatik uçuş (kart/konum odağı). nonce değişince tetiklenir.
 function FlyTo({ target }) {
   const map = useMap();
@@ -66,6 +72,7 @@ export default function MapView({
   routeEnd,
   boundary,
   onMapReady,
+  onMapMove,
   onPlace,
   onSelect,
   onConfirm,
@@ -94,6 +101,7 @@ export default function MapView({
       )}
 
       <MapReady onReady={onMapReady} />
+      <MoveWatch onMove={onMapMove} />
       <ClickCapture active={reportMode} onPlace={onPlace} />
       <FlyTo target={flyTarget} />
 

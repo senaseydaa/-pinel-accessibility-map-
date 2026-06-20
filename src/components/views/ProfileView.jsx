@@ -54,8 +54,8 @@ export default function ProfileView({ theme, onToggleTheme, points }) {
       </div>
 
       <p className="mt-5 text-[11px] leading-relaxed text-muted">
-        PINel — Üsküdar Meydanı erişilebilirlik haritası. Veri: topluluk bildirimleri +
-        Metro İstanbul açık verisi. Engelsiz bir Üsküdar için.
+        PINel — İstanbul Anadolu Yakası erişilebilirlik haritası. Veri: topluluk bildirimleri +
+        Metro İstanbul açık verisi + OpenStreetMap. Engelsiz bir şehir için.
       </p>
     </div>
   );

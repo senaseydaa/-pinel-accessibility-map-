@@ -1,28 +1,16 @@
 // PINel — OpenStreetMap (Overpass) erişilebilir altyapı çekirdeği.
-// Canlı/güncel topluluk verisi: asansör, rampa, hissedilebilir yüzey, erişilebilir
-// tuvalet/otopark, erişilebilir/erişilemez yerler. Üsküdar Meydanı çevresi.
+// Konuma göre yükler: harita merkezine belirli yarıçapta noktalar (gezdikçe yenilenir),
+// böylece tüm Anadolu yakasında noktalara boğulmadan, karşı yaka yüklenmeden çalışır.
 
-// Birden çok Overpass aynası — biri 504/yoğun olursa diğerine geç
 const ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
   'https://overpass.private.coffee/api/interpreter',
 ];
-const BBOX = '40.9925,29.0064,41.0779,29.0917'; // Üsküdar ilçesi (S,W,N,E)
-const CENTER = [41.0268, 29.0152]; // Üsküdar Meydanı — cap'te en merkezi noktaları tut
-const TTL = 60 * 60 * 1000; // OSM altyapısı yavaş değişir → 1 sa cache
-const CAP = 350;
-
-const QUERY = `[out:json][timeout:20];(
-  nwr["highway"="elevator"](${BBOX});
-  nwr["ramp"="yes"](${BBOX});
-  nwr["kerb"](${BBOX});
-  nwr["tactile_paving"](${BBOX});
-  nwr["toilets:wheelchair"](${BBOX});
-  nwr["amenity"="toilets"]["wheelchair"](${BBOX});
-  nwr["capacity:disabled"](${BBOX});
-  nwr["wheelchair"](${BBOX});
-);out center tags;`;
+const TTL = 60 * 60 * 1000; // 1 sa cache
+const CAP = 250;
+const DEFAULT_RADIUS = 1500; // m
+const MAX_RADIUS = 4000;
 
 const LABELS = {
   elevator: 'Asansör',
@@ -34,7 +22,7 @@ const LABELS = {
   inaccessible: 'Erişime kapalı',
 };
 
-let cache = null;
+const cache = new Map(); // key → { at, data }
 
 function classify(t) {
   if (t.highway === 'elevator') return 'elevator';
@@ -47,16 +35,29 @@ function classify(t) {
   return null;
 }
 
-async function runOverpass() {
+function buildQuery(lat, lng, radius) {
+  const A = `(around:${radius},${lat},${lng})`;
+  return `[out:json][timeout:20];(
+    nwr["highway"="elevator"]${A};
+    nwr["ramp"="yes"]${A};
+    nwr["kerb"]${A};
+    nwr["tactile_paving"]${A};
+    nwr["toilets:wheelchair"]${A};
+    nwr["amenity"="toilets"]["wheelchair"]${A};
+    nwr["capacity:disabled"]${A};
+    nwr["wheelchair"]${A};
+  );out center tags;`;
+}
+
+async function runOverpass(query) {
   const opts = {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
-      // Overpass UA olmayan istekleri 406 ile reddediyor (sunucu tarafı — UA serbest)
-      'User-Agent': 'PINel/1.0 (Üsküdar accessibility map)',
+      'User-Agent': 'PINel/1.0 (accessibility map)',
       Accept: 'application/json',
     },
-    body: 'data=' + encodeURIComponent(QUERY),
+    body: 'data=' + encodeURIComponent(query),
   };
   let lastErr;
   for (const ep of ENDPOINTS) {
@@ -71,25 +72,32 @@ async function runOverpass() {
   throw lastErr || new Error('Overpass erişilemedi');
 }
 
-export async function getAccessibleInfra() {
-  if (cache && Date.now() - cache.at < TTL) return cache.data;
-  const json = await runOverpass();
+export async function getAccessibleInfra({ lat, lng, radius } = {}) {
+  lat = Number(lat) || 41.0268;
+  lng = Number(lng) || 29.0152;
+  radius = Math.min(MAX_RADIUS, Number(radius) || DEFAULT_RADIUS);
+  const key = `${lat.toFixed(3)},${lng.toFixed(3)},${radius}`;
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < TTL) return hit.data;
+
+  const json = await runOverpass(buildQuery(lat, lng, radius));
   const all = [];
   for (const e of json.elements || []) {
     const t = e.tags || {};
     const kind = classify(t);
     if (!kind) continue;
-    const lat = e.lat ?? e.center?.lat;
-    const lng = e.lon ?? e.center?.lon;
-    if (!isFinite(lat) || !isFinite(lng)) continue;
-    all.push({ id: `osm-${e.type}-${e.id}`, kind, label: LABELS[kind], name: t.name || t['name:tr'] || null, lat, lng });
+    const la = e.lat ?? e.center?.lat;
+    const ln = e.lon ?? e.center?.lon;
+    if (!isFinite(la) || !isFinite(ln)) continue;
+    all.push({ id: `osm-${e.type}-${e.id}`, kind, label: LABELS[kind], name: t.name || t['name:tr'] || null, lat: la, lng: ln });
   }
-  // İlçe geneli çok nokta olabilir → merkeze (Meydan) en yakın CAP kadarını tut
-  all.sort((a, b) => (a.lat - CENTER[0]) ** 2 + (a.lng - CENTER[1]) ** 2 - ((b.lat - CENTER[0]) ** 2 + (b.lng - CENTER[1]) ** 2));
+  // Merkeze en yakın CAP kadarını tut
+  all.sort((a, b) => (a.lat - lat) ** 2 + (a.lng - lng) ** 2 - ((b.lat - lat) ** 2 + (b.lng - lng) ** 2));
   const items = all.slice(0, CAP);
   const byKind = {};
   for (const i of items) byKind[i.kind] = (byKind[i.kind] || 0) + 1;
-  const data = { fetchedAt: new Date().toISOString(), count: items.length, total: all.length, byKind, items };
-  cache = { at: Date.now(), data };
+  const data = { fetchedAt: new Date().toISOString(), center: [lat, lng], radius, count: items.length, total: all.length, byKind, items };
+  if (cache.size > 30) cache.clear();
+  cache.set(key, { at: Date.now(), data });
   return data;
 }

@@ -75,6 +75,7 @@ export default function Sidebar({
           onUseMeydan={rest.onRouteUseMeydan}
           onPickStart={rest.onRoutePickStart}
           onPickDest={rest.onRoutePickDest}
+          onSetStart={rest.onRouteSetStart}
           onSetPreset={rest.onRouteSetPreset}
           onCompute={rest.onRouteCompute}
           onClear={rest.onRouteClear}

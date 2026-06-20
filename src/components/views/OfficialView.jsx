@@ -50,18 +50,16 @@ export default function OfficialView({ official, officialStatus, onRefreshOffici
 
           <div className="rounded-xl border border-border bg-surface p-3">
             <p className={`text-sm font-semibold ${official.service ? 'text-ramp' : 'text-ink'}`}>
-              {official.service ? `M5 aksama: ${official.service.description}` : 'M5 hattı: normal çalışıyor ✓'}
+              {official.service
+                ? `${official.service.lineName} aksama: ${official.service.description}`
+                : 'Anadolu yakası hatları: normal çalışıyor ✓'}
             </p>
             <p className="mt-1 font-mono text-[12px] text-muted">
-              M5 hattında {official.m5Count} ekipman arızalı · ağ geneli {official.networkTotal}
+              Anadolu yakası hatlarında (M4·M5·M8·T3) {official.lineCount} ekipman arızalı · ağ geneli {official.networkTotal}
             </p>
-            {official.m5Count > 0 && (
-              <button
-                type="button"
-                onClick={onFitOfficial}
-                className="btn-ghost mt-2 w-full text-[12px]"
-              >
-                M5 arızalarını haritada göster
+            {official.lineCount > 0 && (
+              <button type="button" onClick={onFitOfficial} className="btn-ghost mt-2 w-full text-[12px]">
+                Arızaları haritada göster
               </button>
             )}
           </div>

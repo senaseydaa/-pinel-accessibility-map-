@@ -7,12 +7,12 @@ import Toast from './components/Toast.jsx';
 import { useLocalStorage } from './hooks/useLocalStorage.js';
 import { useGeolocation } from './hooks/useGeolocation.js';
 import { getType } from './data/obstacleTypes.js';
-import { distanceMeters } from './lib/geo.js';
+import { distanceMeters, pointInRings } from './lib/geo.js';
 import { REFUTE_THRESHOLD, MERGE_RADIUS_M } from './lib/status.js';
 import { fetchMetro } from './lib/metro.js';
 import { fetchOsmInfra } from './lib/osm.js';
 import { fetchRoute } from './lib/route.js';
-import { fetchBoundary } from './lib/boundary.js';
+import anadoluBoundary from './data/anadolu-boundary.json';
 
 const MEYDAN = [41.0268, 29.0152];
 // Bildirim ömrü kategoriye göre (dk) — kalıcı engeller (rampa/asansör) daha uzun
@@ -88,7 +88,7 @@ export default function App() {
   const [route, setRoute] = useState(null);
   const [routeStatus, setRouteStatus] = useState('idle');
   const [pickingFor, setPickingFor] = useState(null);
-  const [boundary, setBoundary] = useState(null);
+  const [boundary] = useState(anadoluBoundary); // statik Anadolu yakası sınırı
 
   const { coords: userCoords, locate, status: geoStatus } = useGeolocation();
 
@@ -96,6 +96,8 @@ export default function App() {
   const flyNonce = useRef(0);
   const toastId = useRef(0);
   const lastTrigger = useRef(null);
+  const showInfraRef = useRef(false);
+  const infraTimer = useRef(null);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -129,22 +131,6 @@ export default function App() {
     loadOfficial();
   }, []);
 
-  // İlçe sınırını çek; gelince haritayı Üsküdar ilçesine sığdır
-  useEffect(() => {
-    fetchBoundary().then(setBoundary).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    if (boundary?.bbox && mapRef.current) {
-      mapRef.current.fitBounds(
-        [
-          [boundary.bbox[0], boundary.bbox[2]],
-          [boundary.bbox[1], boundary.bbox[3]],
-        ],
-        { padding: [16, 16] }
-      );
-    }
-  }, [boundary]);
 
   function loadOfficial() {
     setOfficialStatus('loading');
@@ -154,6 +140,18 @@ export default function App() {
         setOfficialStatus('success');
       })
       .catch(() => setOfficialStatus('error'));
+  }
+
+  function fitAnadolu() {
+    if (mapRef.current && boundary?.bbox) {
+      mapRef.current.fitBounds(
+        [
+          [boundary.bbox[0], boundary.bbox[2]],
+          [boundary.bbox[1], boundary.bbox[3]],
+        ],
+        { padding: [12, 12] }
+      );
+    }
   }
 
   function fitOfficial() {
@@ -166,12 +164,27 @@ export default function App() {
     setSheetExpanded(false);
   }
 
+  // Mevcut harita görünümü → merkez + yarıçap (yakınlaştıkça küçük, uzaklaştıkça büyük)
+  function currentView() {
+    const m = mapRef.current;
+    if (!m) return { lat: MEYDAN[0], lng: MEYDAN[1], radius: 1500 };
+    const c = m.getCenter();
+    const ne = m.getBounds().getNorthEast();
+    return { lat: c.lat, lng: c.lng, radius: Math.max(600, Math.min(4000, Math.round(c.distanceTo(ne)))) };
+  }
+
   function loadInfra() {
-    if (infra || infraStatus === 'loading') return;
+    const v = currentView();
     setInfraStatus('loading');
-    fetchOsmInfra()
+    fetchOsmInfra(v.lat.toFixed(5), v.lng.toFixed(5), v.radius)
       .then((data) => {
-        setInfra(data);
+        // Anadolu yakası dışındaki noktaları gizle
+        const inside = boundary?.rings
+          ? data.items.filter((i) => pointInRings([i.lat, i.lng], boundary.rings))
+          : data.items;
+        const byKind = {};
+        inside.forEach((i) => (byKind[i.kind] = (byKind[i.kind] || 0) + 1));
+        setInfra({ ...data, items: inside, byKind, count: inside.length });
         setInfraStatus('success');
       })
       .catch((err) => {
@@ -183,13 +196,22 @@ export default function App() {
   function toggleInfra() {
     const next = !showInfra;
     setShowInfra(next);
+    showInfraRef.current = next;
     if (next) loadInfra();
   }
 
   function focusInfra(coords) {
     setShowInfra(true);
-    fly(coords, 18);
-    setSheetExpanded(false);
+    showInfraRef.current = true;
+    fly(coords, 17);
+    setSheetExpanded(false); // fly → moveend → otomatik yeniden yükler
+  }
+
+  // Harita gezilince (katman açıksa) yakındaki altyapıyı yeniden yükle
+  function handleMapMove() {
+    if (!showInfraRef.current) return;
+    clearTimeout(infraTimer.current);
+    infraTimer.current = setTimeout(loadInfra, 700);
   }
 
   function showToast(message, type = 'success') {
@@ -459,7 +481,7 @@ export default function App() {
       >
         Bildirim paneline geç
       </a>
-      <h1 className="sr-only">PINel — Üsküdar Meydanı erişilebilirlik haritası</h1>
+      <h1 className="sr-only">PINel — İstanbul Anadolu Yakası erişilebilirlik haritası</h1>
 
       <main className={`absolute inset-0 lg:relative lg:flex-1 ${reportMode || pickingFor ? 'reporting cursor-crosshair' : ''}`}>
         <MapView
@@ -480,8 +502,10 @@ export default function App() {
           boundary={boundary}
           onMapReady={(m) => {
             mapRef.current = m;
+            fitAnadolu();
           }}
           onPlace={handlePlace}
+          onMapMove={handleMapMove}
           onSelect={focusPin}
           onConfirm={(id) => castVote(id, 'confirm')}
           onRefute={(id) => castVote(id, 'refute')}
@@ -521,9 +545,9 @@ export default function App() {
           </button>
           <button
             type="button"
-            onClick={() => fly(MEYDAN, 17)}
+            onClick={fitAnadolu}
             className="icon-btn shadow-card"
-            aria-label="Üsküdar Meydanı'na dön"
+            aria-label="Anadolu yakasını göster"
           >
             <Crosshair size={17} />
           </button>
@@ -561,7 +585,7 @@ export default function App() {
           onRefreshInfra={loadInfra}
           showInfra={showInfra}
           onToggleInfra={toggleInfra}
-          infraFrom={userCoords || MEYDAN}
+          infraFrom={infra?.center || userCoords || MEYDAN}
           onFocusInfra={focusInfra}
           routeStart={routeStart}
           routeEnd={routeEnd}
@@ -572,6 +596,7 @@ export default function App() {
           onRouteUseMeydan={() => setRouteStart({ coords: MEYDAN, label: 'Üsküdar Meydanı' })}
           onRoutePickStart={() => routePick('start')}
           onRoutePickDest={() => routePick('dest')}
+          onRouteSetStart={(p) => setRouteStart({ coords: p.coords, label: p.name })}
           onRouteSetPreset={(p) => setRouteEnd({ coords: p.coords, label: p.name })}
           onRouteCompute={() => computeRoute(routeStart, routeEnd)}
           onRouteClear={() => {
