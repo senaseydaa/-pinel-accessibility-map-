@@ -13,7 +13,10 @@ import { fetchMetro } from './lib/metro.js';
 import { fetchOsmInfra } from './lib/osm.js';
 
 const MEYDAN = [41.0268, 29.0152];
-const LIFETIME_MIN = 240; // Bildirimler 4 saat canlı kalır; "Hâlâ duruyor" yeniler.
+// Bildirim ömrü kategoriye göre (dk) — kalıcı engeller (rampa/asansör) daha uzun
+// yaşar; sokak çalışması daha çabuk değişir. "Hâlâ duruyor" oyu süreyi yeniler.
+const LIFETIME = { rampa: 480, asansor: 480, calisma: 240 };
+const lifetimeMin = (type) => LIFETIME[type] ?? 240;
 
 // Üsküdar Meydanı çevresinden gerçekçi örnek bildirimler (yalnızca depo boşsa).
 // authorId 'seed' — yani benim bildirimim değil; bu yüzden silemem, yalnızca oylayabilirim.
@@ -25,7 +28,7 @@ function seedPins() {
     authorId: 'seed',
     ...p,
     createdAt: new Date(now - agoMin * 60000).toISOString(),
-    expiresAt: new Date(now - agoMin * 60000 + LIFETIME_MIN * 60000).toISOString(),
+    expiresAt: new Date(now - agoMin * 60000 + lifetimeMin(p.type) * 60000).toISOString(),
   });
   return [
     make(95, {
@@ -139,23 +142,30 @@ export default function App() {
     setSheetExpanded(false);
   }
 
+  function loadInfra() {
+    if (infra || infraStatus === 'loading') return;
+    setInfraStatus('loading');
+    fetchOsmInfra()
+      .then((data) => {
+        setInfra(data);
+        setInfraStatus('success');
+      })
+      .catch((err) => {
+        setInfraStatus('error');
+        showToast(err.message, 'error');
+      });
+  }
+
   function toggleInfra() {
     const next = !showInfra;
     setShowInfra(next);
-    if (next && !infra && infraStatus !== 'loading') {
-      setInfraStatus('loading');
-      fetchOsmInfra()
-        .then((data) => {
-          setInfra(data);
-          setInfraStatus('success');
-          showToast(`Erişilebilir altyapı yüklendi (${data.count} nokta).`);
-        })
-        .catch((err) => {
-          setInfraStatus('error');
-          setShowInfra(false);
-          showToast(err.message, 'error');
-        });
-    }
+    if (next) loadInfra();
+  }
+
+  function focusInfra(coords) {
+    setShowInfra(true);
+    fly(coords, 18);
+    setSheetExpanded(false);
   }
 
   function showToast(message, type = 'success') {
@@ -184,6 +194,7 @@ export default function App() {
       setActiveView(key);
       setPanelCollapsed(false);
       setSheetExpanded(true);
+      if (key === 'altyapi') loadInfra();
     }
   }
 
@@ -206,8 +217,8 @@ export default function App() {
     if (c) openReport({ lat: c.lat, lng: c.lng });
   }
 
-  function freshExpiry() {
-    return new Date(Date.now() + LIFETIME_MIN * 60000).toISOString();
+  function freshExpiry(type) {
+    return new Date(Date.now() + lifetimeMin(type) * 60000).toISOString();
   }
 
   function saveObstacle(type, notes, photo) {
@@ -221,7 +232,7 @@ export default function App() {
     );
     if (dup) {
       setPins((prev) =>
-        prev.map((p) => (p.id === dup.id ? { ...p, confirms: (p.confirms || 0) + 1, expiresAt: freshExpiry() } : p))
+        prev.map((p) => (p.id === dup.id ? { ...p, confirms: (p.confirms || 0) + 1, expiresAt: freshExpiry(dup.type) } : p))
       );
       setVotes((v) => ({ ...v, [dup.id]: 'confirm' }));
       setModalCoords(null);
@@ -244,7 +255,7 @@ export default function App() {
       confirms: 1, // sahibinin kendi onayı
       refutes: 0,
       createdAt: new Date(created).toISOString(),
-      expiresAt: new Date(created + LIFETIME_MIN * 60000).toISOString(),
+      expiresAt: new Date(created + lifetimeMin(type) * 60000).toISOString(),
     };
     setPins((prev) => [pin, ...prev]);
     setVotes((v) => ({ ...v, [pin.id]: 'confirm' }));
@@ -281,7 +292,7 @@ export default function App() {
       setPins((prevPins) =>
         prevPins.map((p) =>
           p.id === pinId
-            ? { ...p, confirms, refutes, ...(kind === 'confirm' ? { expiresAt: freshExpiry() } : {}) }
+            ? { ...p, confirms, refutes, ...(kind === 'confirm' ? { expiresAt: freshExpiry(pin.type) } : {}) }
             : p
         )
       );
@@ -324,8 +335,18 @@ export default function App() {
     setReportMode(next);
     if (next) {
       setSheetExpanded(false);
-      showToast('Bildirim modu açık. Haritada engelin olduğu yere dokunun.', 'info');
+      showToast('Bildirim modu açık. Haritada bir noktaya dokunun ya da Sekme ile "Merkeze pin bırak" / "Konumumdan" düğmelerine gidin.', 'info');
     }
+  }
+
+  function reportHere() {
+    locate()
+      .then((coords) => {
+        fly(coords, 18);
+        if (!reportMode) setReportMode(true);
+        openReport({ lat: coords[0], lng: coords[1] });
+      })
+      .catch((err) => showToast(err.message, 'error'));
   }
 
   function locateMe() {
@@ -366,6 +387,7 @@ export default function App() {
       >
         Bildirim paneline geç
       </a>
+      <h1 className="sr-only">PINel — Üsküdar Meydanı erişilebilirlik haritası</h1>
 
       <main className={`absolute inset-0 lg:relative lg:flex-1 ${reportMode ? 'reporting cursor-crosshair' : ''}`}>
         <MapView
@@ -391,14 +413,21 @@ export default function App() {
         />
 
         {reportMode ? (
-          <div className="pointer-events-auto absolute left-1/2 top-3 z-[600] flex max-w-[calc(100%-7rem)] -translate-x-1/2 items-center gap-2 rounded-full border border-ramp/40 bg-surface py-1.5 pl-3 pr-1.5 shadow-card">
-            <span className="text-xs font-semibold text-ramp">Bir noktaya dokunun</span>
+          <div className="pointer-events-auto absolute left-1/2 top-3 z-[600] flex max-w-[calc(100%-6rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-ramp/40 bg-surface px-2 py-1.5 shadow-card">
+            <span className="px-1 text-xs font-semibold text-ramp">Engel nerede?</span>
             <button
               type="button"
               onClick={dropPinAtCenter}
-              className="rounded-full bg-brand px-2.5 py-1 text-xs font-semibold text-white hover:bg-brand-hover"
+              className="rounded-full bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand-hover"
             >
-              Merkeze pin bırak
+              Merkeze pin
+            </button>
+            <button
+              type="button"
+              onClick={reportHere}
+              className="rounded-full border border-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink hover:bg-surface-2"
+            >
+              Konumumdan
             </button>
           </div>
         ) : (
@@ -456,6 +485,13 @@ export default function App() {
           officialStatus={officialStatus}
           onRefreshOfficial={loadOfficial}
           onFitOfficial={fitOfficial}
+          infra={infra}
+          infraStatus={infraStatus}
+          onRefreshInfra={loadInfra}
+          showInfra={showInfra}
+          onToggleInfra={toggleInfra}
+          infraFrom={userCoords || MEYDAN}
+          onFocusInfra={focusInfra}
           reportMode={reportMode}
           onToggleReport={toggleReport}
           query={query}

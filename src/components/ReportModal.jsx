@@ -3,21 +3,25 @@ import { X, TriangleAlert, Camera, Trash2 } from 'lucide-react';
 import { OBSTACLE_LIST } from '../data/obstacleTypes.js';
 import { fileToResizedDataURL } from '../lib/photo.js';
 
+const TYPE_KEYS = OBSTACLE_LIST.map((o) => o.key);
+
 // Erişilebilir engel bildirim diyaloğu: role="dialog" + aria-modal, odak tuzağı,
-// Esc ile kapatma, açılışta forma odak, kategori için radyo grubu.
-// Fotoğraf spam'e karşı zorunludur (kamera veya galeri; tarayıcıda küçültülür).
+// Esc, açılışta odak başlıkta. Kategori gerçek bir radyo grubu (ok tuşları + roving
+// tabindex). Fotoğraf opsiyoneldir (teşvik edilir) — kimseyi bildirimden dışlamaz.
 export default function ReportModal({ coords, onClose, onSave }) {
   const [type, setType] = useState('rampa');
   const [notes, setNotes] = useState('');
   const [photo, setPhoto] = useState(null);
   const [photoErr, setPhotoErr] = useState(null);
   const dialogRef = useRef(null);
-  const firstRef = useRef(null);
+  const titleRef = useRef(null);
   const fileRef = useRef(null);
+  const radioRefs = useRef({});
   const titleId = useId();
+  const legendId = useId();
 
   useEffect(() => {
-    firstRef.current?.focus();
+    titleRef.current?.focus();
     const onKey = (e) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -26,7 +30,7 @@ export default function ReportModal({ coords, onClose, onSave }) {
       }
       if (e.key !== 'Tab') return;
       const f = dialogRef.current?.querySelectorAll(
-        'button, [href], input, textarea, select, [tabindex]:not([tabindex="-1"])'
+        'button:not([tabindex="-1"]), [href], input, textarea, select, [tabindex="0"]'
       );
       if (!f || f.length === 0) return;
       const first = f[0];
@@ -43,6 +47,18 @@ export default function ReportModal({ coords, onClose, onSave }) {
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  function onRadioKey(e) {
+    const i = TYPE_KEYS.indexOf(type);
+    let ni = null;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') ni = (i + 1) % TYPE_KEYS.length;
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') ni = (i - 1 + TYPE_KEYS.length) % TYPE_KEYS.length;
+    if (ni === null) return;
+    e.preventDefault();
+    const key = TYPE_KEYS[ni];
+    setType(key);
+    radioRefs.current[key]?.focus();
+  }
+
   async function handleFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -56,10 +72,6 @@ export default function ReportModal({ coords, onClose, onSave }) {
 
   const submit = (e) => {
     e.preventDefault();
-    if (!photo) {
-      setPhotoErr('Spam’ı önlemek için fotoğraf zorunlu.');
-      return;
-    }
     onSave(type, notes.trim(), photo);
   };
 
@@ -79,15 +91,14 @@ export default function ReportModal({ coords, onClose, onSave }) {
         className="flex max-h-[92dvh] w-full max-w-md flex-col overflow-y-auto rounded-t-2xl border border-border bg-surface shadow-pop sm:rounded-2xl"
       >
         <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
-          <h2 id={titleId} className="flex items-center gap-2 text-base font-extrabold text-ink">
+          <h2 id={titleId} ref={titleRef} tabIndex={-1} className="flex items-center gap-2 text-base font-extrabold text-ink outline-none">
             <TriangleAlert size={18} className="text-ramp" aria-hidden="true" />
             Yeni engel bildir
           </h2>
           <button
             type="button"
-            ref={firstRef}
             onClick={onClose}
-            className="rounded-lg p-1.5 text-muted hover:bg-surface-2 hover:text-ink"
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-ink"
             aria-label="Pencereyi kapat"
           >
             <X size={18} />
@@ -96,19 +107,17 @@ export default function ReportModal({ coords, onClose, onSave }) {
 
         <div className="flex flex-col gap-4 px-5 py-4">
           <div>
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
-              Koordinatlar
-            </span>
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">Konum</span>
             <p className="rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-xs text-ink">
               {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}
             </p>
           </div>
 
           <fieldset>
-            <legend className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
+            <legend id={legendId} className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
               Engel türü
             </legend>
-            <div role="radiogroup" className="flex flex-col gap-2">
+            <div role="radiogroup" aria-labelledby={legendId} onKeyDown={onRadioKey} className="flex flex-col gap-2">
               {OBSTACLE_LIST.map((o) => {
                 const active = type === o.key;
                 const Icon = o.Icon;
@@ -116,8 +125,10 @@ export default function ReportModal({ coords, onClose, onSave }) {
                   <button
                     type="button"
                     key={o.key}
+                    ref={(el) => (radioRefs.current[o.key] = el)}
                     role="radio"
                     aria-checked={active}
+                    tabIndex={active ? 0 : -1}
                     onClick={() => setType(o.key)}
                     className={`flex items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
                       active ? 'border-brand bg-brand/5' : 'border-border bg-surface hover:bg-surface-2'
@@ -136,16 +147,15 @@ export default function ReportModal({ coords, onClose, onSave }) {
 
           <div>
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
-              Fotoğraf <span className="font-normal normal-case text-muted">(zorunlu)</span>
+              Fotoğraf <span className="font-normal normal-case text-muted">(önerilir)</span>
             </span>
             <input
               ref={fileRef}
               type="file"
               accept="image/*"
-              capture="environment"
               onChange={handleFile}
               className="sr-only"
-              aria-label="Fotoğraf seç"
+              aria-label="Fotoğraf ekle"
             />
             {photo ? (
               <div className="relative">
@@ -169,10 +179,11 @@ export default function ReportModal({ coords, onClose, onSave }) {
                 className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-surface px-3 py-6 text-sm font-semibold text-muted hover:bg-surface-2"
               >
                 <Camera size={18} aria-hidden="true" />
-                Fotoğraf çek veya seç
+                Fotoğraf ekle (kamera veya galeri)
               </button>
             )}
             {photoErr && <p className="mt-1.5 text-xs font-semibold text-ramp">{photoErr}</p>}
+            <p className="mt-1.5 text-[11px] text-muted">Fotoğraf bildirimi güçlendirir ama zorunlu değildir.</p>
           </div>
 
           <div>
@@ -194,7 +205,7 @@ export default function ReportModal({ coords, onClose, onSave }) {
           <button type="button" onClick={onClose} className="btn-ghost flex-1">
             Vazgeç
           </button>
-          <button type="submit" className="btn-primary flex-[2]" disabled={!photo}>
+          <button type="submit" className="btn-primary flex-[2]">
             Haritaya ekle
           </button>
         </div>

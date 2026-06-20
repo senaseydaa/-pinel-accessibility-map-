@@ -74,7 +74,7 @@ export default function ReportsView({
         {pins.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted">
             {totalCount === 0
-              ? 'Henüz bildirim yok. Sağ alttan "Engel bildir" ile başlayın.'
+              ? 'Henüz bildirim yok. "+" (Engel bildir) ile başlayın.'
               : 'Bu filtreye uygun bildirim yok.'}
           </div>
         ) : (

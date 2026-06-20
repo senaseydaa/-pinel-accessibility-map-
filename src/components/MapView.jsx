@@ -73,7 +73,7 @@ export default function MapView({
       <FlyTo target={flyTarget} />
 
       {infraItems.map((o) => (
-        <Marker key={o.id} position={[o.lat, o.lng]} icon={makeInfraIcon(o.kind)} keyboard={false}>
+        <Marker key={o.id} position={[o.lat, o.lng]} icon={makeInfraIcon(o.kind, o.name ? `${o.label}, ${o.name}` : o.label)} keyboard={false}>
           <Popup>
             <div className="min-w-[10rem]">
               <span className={`text-sm font-semibold ${o.kind === 'inaccessible' ? 'text-ramp' : 'text-brand'}`}>{o.label}</span>
@@ -95,7 +95,11 @@ export default function MapView({
       {officialItems.map((o) => {
         const days = daysSince(o.date, now);
         return (
-          <Marker key={o.id} position={[o.lat, o.lng]} icon={makeOfficialIcon(o.group, o.type)}>
+          <Marker
+            key={o.id}
+            position={[o.lat, o.lng]}
+            icon={makeOfficialIcon(o.group, o.type, false, `${o.group === 'merdiven' ? 'Yürüyen Merdiven' : 'Asansör'} ${o.type}, ${o.stationName}`)}
+          >
             <Popup>
               <div className="min-w-[12rem]">
                 <span className="flex items-center gap-1.5 font-semibold text-ink">
@@ -125,7 +129,7 @@ export default function MapView({
           <Marker
             key={pin.id}
             position={[pin.lat, pin.lng]}
-            icon={makeMarkerIcon(pin.type, pin.id === selectedId)}
+            icon={makeMarkerIcon(pin.type, pin.id === selectedId, `${getType(pin.type).label}, ${status.label}, ${pin.confirms || 0} onay`)}
             eventHandlers={{ click: () => onSelect(pin) }}
           >
             <Popup>
@@ -151,31 +155,33 @@ export default function MapView({
                   <button
                     type="button"
                     onClick={() => onConfirm(pin.id)}
-                    className={`inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-semibold hover:bg-surface-2 ${
+                    aria-pressed={myVote === 'confirm'}
+                    className={`inline-flex min-h-[40px] items-center gap-1 rounded-md border border-border px-2.5 py-2 text-[12px] font-semibold hover:bg-surface-2 ${
                       myVote === 'confirm' ? 'text-brand' : 'text-ink'
                     }`}
                   >
-                    <Check size={13} aria-hidden="true" />
+                    <Check size={14} aria-hidden="true" />
                     Hâlâ duruyor
                   </button>
                   <button
                     type="button"
                     onClick={() => onRefute(pin.id)}
-                    className={`inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-semibold hover:bg-surface-2 ${
+                    aria-pressed={myVote === 'refute'}
+                    className={`inline-flex min-h-[40px] items-center gap-1 rounded-md border border-border px-2.5 py-2 text-[12px] font-semibold hover:bg-surface-2 ${
                       myVote === 'refute' ? 'text-ramp' : 'text-ink'
                     }`}
                   >
-                    <X size={13} aria-hidden="true" />
+                    <X size={14} aria-hidden="true" />
                     Kalktı
                   </button>
                   {isOwn && (
                     <button
                       type="button"
                       onClick={() => onDelete(pin.id)}
-                      className="ml-auto inline-flex items-center rounded-md border border-border p-1.5 text-muted hover:bg-surface-2 hover:text-ramp"
+                      className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-md border border-border text-muted hover:bg-surface-2 hover:text-ramp"
                       aria-label="Kendi bildirimini sil"
                     >
-                      <Trash2 size={13} aria-hidden="true" />
+                      <Trash2 size={15} aria-hidden="true" />
                     </button>
                   )}
                 </div>

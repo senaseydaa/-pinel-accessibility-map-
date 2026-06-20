@@ -29,8 +29,8 @@ export default function OfficialView({ official, officialStatus, onRefreshOffici
           >
             <p className={`text-sm font-bold ${official.uskudar.accessible ? 'text-brand' : 'text-ramp'}`}>
               {official.uskudar.accessible
-                ? 'Üsküdar: engelli erişimine uygun ✓'
-                : `Üsküdar: erişim kısıtlı ⚠ (${official.uskudar.liftFaults} asansör arızalı)`}
+                ? 'Üsküdar (M5): engelli erişimine uygun ✓'
+                : `Üsküdar (M5): erişim kısıtlı ⚠ (${official.uskudar.liftFaults} asansör arızalı)`}
             </p>
             <div className="mt-2 space-y-0.5 font-mono text-[12px] text-muted">
               <p>
@@ -42,6 +42,10 @@ export default function OfficialView({ official, officialStatus, onRefreshOffici
                 {official.uskudar.escFaults > 0 ? ` · ${official.uskudar.escFaults} arıza` : ''}
               </p>
             </div>
+            <p className="mt-2 text-[11px] leading-snug text-muted">
+              Bu durum <strong className="font-semibold">M5 metro istasyonu</strong> içindir. Marmaray ayrı bir
+              sistemdir; asansör verisi şu an kapsam dışı.
+            </p>
           </div>
 
           <div className="rounded-xl border border-border bg-surface p-3">

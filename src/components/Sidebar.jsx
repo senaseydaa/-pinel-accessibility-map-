@@ -1,11 +1,13 @@
-import { Accessibility, Plus, List, ShieldCheck, User, Sun, Moon } from 'lucide-react';
+import { Accessibility, Plus, List, ShieldCheck, MapPin, User, Sun, Moon } from 'lucide-react';
 import ReportsView from './views/ReportsView.jsx';
 import OfficialView from './views/OfficialView.jsx';
+import InfraView from './views/InfraView.jsx';
 import ProfileView from './views/ProfileView.jsx';
 
 const VIEWS = [
   { key: 'reports', label: 'Bildirimler', Icon: List },
   { key: 'official', label: 'Resmî durum', Icon: ShieldCheck },
+  { key: 'altyapi', label: 'Altyapı', Icon: MapPin },
   { key: 'profile', label: 'Profil', Icon: User },
 ];
 
@@ -66,6 +68,17 @@ export default function Sidebar({
           officialStatus={rest.officialStatus}
           onRefreshOfficial={rest.onRefreshOfficial}
           onFitOfficial={rest.onFitOfficial}
+        />
+      )}
+      {activeView === 'altyapi' && (
+        <InfraView
+          infra={rest.infra}
+          infraStatus={rest.infraStatus}
+          onRefresh={rest.onRefreshInfra}
+          showInfra={rest.showInfra}
+          onToggleShow={rest.onToggleInfra}
+          from={rest.infraFrom}
+          onFocus={rest.onFocusInfra}
         />
       )}
       {activeView === 'profile' && <ProfileView theme={theme} onToggleTheme={onToggleTheme} points={rest.points} />}

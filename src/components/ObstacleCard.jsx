@@ -62,56 +62,56 @@ export default function ObstacleCard({
         <p className="mt-2 text-[13px] leading-relaxed text-muted">{pin.notes}</p>
       </button>
 
-      <div className="flex items-center gap-1 border-t border-border bg-surface-2/60 px-2 py-1.5">
+      <div className="flex items-center gap-1 border-t border-border bg-surface-2/60 px-1.5 py-1">
         <button
           type="button"
           onClick={() => onConfirm(pin.id)}
           aria-pressed={myVote === 'confirm'}
-          className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold hover:bg-surface-2 ${
+          className={`inline-flex min-h-[44px] items-center gap-1 rounded-md px-2.5 py-2 text-[12px] font-semibold hover:bg-surface-2 ${
             myVote === 'confirm' ? 'text-brand' : 'text-ink'
           }`}
           title="Engel hâlâ duruyor — doğrula ve süreyi yenile"
         >
-          <Check size={13} aria-hidden="true" />
+          <Check size={15} aria-hidden="true" />
           Hâlâ duruyor
         </button>
         <button
           type="button"
           onClick={() => onRefute(pin.id)}
           aria-pressed={myVote === 'refute'}
-          className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold hover:bg-surface-2 ${
+          className={`inline-flex min-h-[44px] items-center gap-1 rounded-md px-2.5 py-2 text-[12px] font-semibold hover:bg-surface-2 ${
             myVote === 'refute' ? 'text-ramp' : 'text-ink'
           }`}
           title="Engel kalkmış — bildir"
         >
-          <X size={13} aria-hidden="true" />
+          <X size={15} aria-hidden="true" />
           Kalktı
         </button>
         <div className="ml-auto flex items-center">
           <button
             type="button"
             onClick={() => onSelect(pin)}
-            className="rounded-md p-1.5 text-muted hover:bg-surface-2 hover:text-ink"
+            className="flex h-11 w-11 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-ink"
             aria-label="Haritada göster"
           >
-            <Navigation size={14} aria-hidden="true" />
+            <Navigation size={16} aria-hidden="true" />
           </button>
           <button
             type="button"
             onClick={() => onShare(pin)}
-            className="rounded-md p-1.5 text-muted hover:bg-surface-2 hover:text-ink"
+            className="flex h-11 w-11 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-ink"
             aria-label="Bildirimi paylaş"
           >
-            <Share2 size={14} aria-hidden="true" />
+            <Share2 size={16} aria-hidden="true" />
           </button>
           {isOwn && (
             <button
               type="button"
               onClick={() => onDelete(pin.id)}
-              className="rounded-md p-1.5 text-muted hover:bg-surface-2 hover:text-ramp"
+              className="flex h-11 w-11 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-ramp"
               aria-label="Kendi bildirimini sil"
             >
-              <Trash2 size={14} aria-hidden="true" />
+              <Trash2 size={16} aria-hidden="true" />
             </button>
           )}
         </div>
