@@ -72,6 +72,8 @@ export default function App() {
   const [sheetExpanded, setSheetExpanded] = useState(false);
   const [official, setOfficial] = useState(null);
   const [officialStatus, setOfficialStatus] = useState('idle');
+  const [activeView, setActiveView] = useState('reports');
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
 
   const { coords: userCoords, locate, status: geoStatus } = useGeolocation();
 
@@ -148,6 +150,18 @@ export default function App() {
     setSelectedId(pin.id);
     fly([pin.lat, pin.lng], 18);
     setSheetExpanded(false);
+  }
+
+  function selectView(key) {
+    if (key === activeView) {
+      // aynı ikona tekrar tıklama → paneli aç/kapat
+      setPanelCollapsed((c) => !c);
+      setSheetExpanded((e) => !e);
+    } else {
+      setActiveView(key);
+      setPanelCollapsed(false);
+      setSheetExpanded(true);
+    }
   }
 
   function openReport(coords) {
@@ -352,15 +366,24 @@ export default function App() {
           onDelete={deletePin}
         />
 
-        <div className="pointer-events-none absolute left-1/2 top-3 z-[600] flex max-w-[calc(100%-7rem)] -translate-x-1/2 justify-center">
-          <p
-            className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold shadow-card ${
-              reportMode ? 'border-ramp/40 bg-surface text-ramp' : 'border-border bg-surface text-muted'
-            }`}
-          >
-            {reportMode ? 'Engelin olduğu noktaya dokunun' : 'Üsküdar Meydanı · erişilebilirlik katmanı'}
-          </p>
-        </div>
+        {reportMode ? (
+          <div className="pointer-events-auto absolute left-1/2 top-3 z-[600] flex max-w-[calc(100%-7rem)] -translate-x-1/2 items-center gap-2 rounded-full border border-ramp/40 bg-surface py-1.5 pl-3 pr-1.5 shadow-card">
+            <span className="text-xs font-semibold text-ramp">Bir noktaya dokunun</span>
+            <button
+              type="button"
+              onClick={dropPinAtCenter}
+              className="rounded-full bg-brand px-2.5 py-1 text-xs font-semibold text-white hover:bg-brand-hover"
+            >
+              Merkeze pin bırak
+            </button>
+          </div>
+        ) : (
+          <div className="pointer-events-none absolute left-1/2 top-3 z-[600] flex max-w-[calc(100%-7rem)] -translate-x-1/2 justify-center">
+            <p className="rounded-full border border-border bg-surface px-3.5 py-1.5 text-xs font-semibold text-muted shadow-card">
+              Üsküdar Meydanı · erişilebilirlik katmanı
+            </p>
+          </div>
+        )}
 
         <div className="absolute right-3 top-3 z-[600] flex flex-col gap-2">
           <button
@@ -385,10 +408,14 @@ export default function App() {
 
       <aside
         id="bildirim-paneli"
-        className="fixed inset-x-0 bottom-0 z-[1000] flex max-h-[88dvh] flex-col rounded-t-2xl border-t border-border bg-surface shadow-sheet lg:static lg:h-full lg:max-h-none lg:w-96 lg:rounded-none lg:border-r lg:border-t-0 lg:shadow-none"
+        className={`fixed inset-x-0 bottom-0 z-[1000] flex max-h-[88dvh] flex-col rounded-t-2xl border-t border-border bg-surface shadow-sheet lg:static lg:h-full lg:max-h-none lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-none lg:transition-[width] ${
+          panelCollapsed ? 'lg:w-14' : 'lg:w-96'
+        }`}
         aria-label="Bildirim paneli"
       >
         <Sidebar
+          activeView={activeView}
+          onView={selectView}
           counts={counts}
           points={points}
           official={official}
@@ -397,7 +424,6 @@ export default function App() {
           onFitOfficial={fitOfficial}
           reportMode={reportMode}
           onToggleReport={toggleReport}
-          onDropAtCenter={dropPinAtCenter}
           query={query}
           onQuery={setQuery}
           filter={filter}
@@ -417,6 +443,7 @@ export default function App() {
           onToggleTheme={toggleTheme}
           sheetExpanded={sheetExpanded}
           onToggleSheet={() => setSheetExpanded((v) => !v)}
+          panelCollapsed={panelCollapsed}
         />
       </aside>
 

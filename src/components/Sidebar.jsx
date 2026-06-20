@@ -1,270 +1,125 @@
-import {
-  Accessibility,
-  TriangleAlert,
-  Plus,
-  Search,
-  Sun,
-  Moon,
-  ArrowUpDown,
-} from 'lucide-react';
-import ObstacleCard from './ObstacleCard.jsx';
-import { OBSTACLE_LIST } from '../data/obstacleTypes.js';
+import { Accessibility, Plus, List, ShieldCheck, User, Sun, Moon } from 'lucide-react';
+import ReportsView from './views/ReportsView.jsx';
+import OfficialView from './views/OfficialView.jsx';
+import ProfileView from './views/ProfileView.jsx';
 
-const FILTERS = [{ key: 'all', label: 'Tümü' }, ...OBSTACLE_LIST.map((o) => ({ key: o.key, label: o.short, Icon: o.Icon, color: o.color }))];
+const VIEWS = [
+  { key: 'reports', label: 'Bildirimler', Icon: List },
+  { key: 'official', label: 'Resmî durum', Icon: ShieldCheck },
+  { key: 'profile', label: 'Profil', Icon: User },
+];
 
-function Stat({ value, label }) {
+// Dikey rail (masaüstü) ikon düğmesi
+function RailBtn({ Icon, label, active, accent, onClick }) {
+  const base = 'relative flex h-10 w-10 items-center justify-center rounded-lg transition-colors';
+  const style = accent
+    ? `${active ? 'bg-ramp text-white' : 'bg-brand text-white hover:bg-brand-hover'}`
+    : active
+      ? 'bg-brand/10 text-brand'
+      : 'text-muted hover:bg-surface-2 hover:text-ink';
   return (
-    <div className="rounded-xl border border-border bg-surface px-3 py-2.5">
-      <div className="font-mono text-2xl font-extrabold leading-none text-ink tabular-nums">{value}</div>
-      <div className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-muted">{label}</div>
-    </div>
+    <button type="button" onClick={onClick} className={`${base} ${style}`} title={label} aria-label={label} aria-pressed={active}>
+      <Icon size={20} aria-hidden="true" />
+    </button>
+  );
+}
+
+// Yatay sekme (mobil) düğmesi
+function TabBtn({ Icon, label, active, accent, onClick }) {
+  const style = accent
+    ? `${active ? 'bg-ramp text-white' : 'bg-brand text-white'}`
+    : active
+      ? 'bg-brand/10 text-brand'
+      : 'text-muted hover:bg-surface-2';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex flex-1 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-semibold transition-colors ${style}`}
+      aria-label={label}
+      aria-pressed={active}
+    >
+      <Icon size={18} aria-hidden="true" />
+      {label}
+    </button>
   );
 }
 
 export default function Sidebar({
-  counts,
-  points,
-  official,
-  officialStatus,
-  onRefreshOfficial,
-  onFitOfficial,
+  activeView,
+  onView,
   reportMode,
   onToggleReport,
-  onDropAtCenter,
-  query,
-  onQuery,
-  filter,
-  onFilter,
-  pins,
-  totalCount,
-  selectedId,
-  now,
-  votes,
-  voterId,
-  onSelect,
-  onConfirm,
-  onRefute,
-  onShare,
-  onDelete,
   theme,
   onToggleTheme,
   sheetExpanded,
   onToggleSheet,
+  panelCollapsed,
+  ...rest
 }) {
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      {/* Mobil tutamaç — listeyi aç/kapat */}
-      <button
-        type="button"
-        onClick={onToggleSheet}
-        className="flex w-full shrink-0 justify-center px-4 pb-1 pt-2.5 lg:hidden"
-        aria-expanded={sheetExpanded}
-      >
-        <span className="h-1 w-10 rounded-full bg-border" aria-hidden="true" />
-        <span className="sr-only">{sheetExpanded ? 'Paneli küçült' : 'Paneli genişlet'}</span>
-      </button>
+  const view = (
+    <>
+      {activeView === 'reports' && <ReportsView {...rest} />}
+      {activeView === 'official' && (
+        <OfficialView
+          official={rest.official}
+          officialStatus={rest.officialStatus}
+          onRefreshOfficial={rest.onRefreshOfficial}
+          onFitOfficial={rest.onFitOfficial}
+        />
+      )}
+      {activeView === 'profile' && <ProfileView theme={theme} onToggleTheme={onToggleTheme} points={rest.points} />}
+    </>
+  );
 
-      {/* Üst blok — her zaman görünür (mobil tepe) */}
-      <div className="shrink-0 px-4 pb-3 pt-1 lg:pt-4">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand text-white">
-            <Accessibility size={20} aria-hidden="true" />
-          </span>
-          <div className="min-w-0">
-            <span className="text-lg font-extrabold tracking-tight text-ink">PINel</span>
-            <p className="truncate text-xs text-muted">Üsküdar Meydanı · Erişilebilirlik haritası</p>
-          </div>
+  return (
+    <div className="flex h-full min-h-0 flex-col lg:flex-row-reverse">
+      {/* MASAÜSTÜ — dikey ikon rail (sağ kenarda; panel sola açılır) */}
+      <nav className="hidden w-14 shrink-0 flex-col items-center gap-1.5 border-l border-border bg-surface py-3 lg:flex">
+        <span className="mb-1 flex h-9 w-9 items-center justify-center rounded-lg bg-brand text-white" title="PINel">
+          <Accessibility size={20} aria-hidden="true" />
+        </span>
+        <RailBtn Icon={Plus} label="Engel bildir" accent active={reportMode} onClick={onToggleReport} />
+        <div className="my-1 h-px w-6 bg-border" />
+        {VIEWS.map((v) => (
+          <RailBtn key={v.key} Icon={v.Icon} label={v.label} active={activeView === v.key} onClick={() => onView(v.key)} />
+        ))}
+        <div className="mt-auto" />
+        <RailBtn
+          Icon={theme === 'dark' ? Sun : Moon}
+          label={theme === 'dark' ? 'Açık tema' : 'Koyu tema'}
+          onClick={onToggleTheme}
+        />
+      </nav>
+
+      {/* İÇERİK SÜTUNU */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {/* MOBİL — tutamaç + sekme şeridi */}
+        <div className="shrink-0 lg:hidden">
           <button
             type="button"
-            onClick={onToggleTheme}
-            className="icon-btn ml-auto"
-            aria-label={theme === 'dark' ? 'Açık temaya geç' : 'Koyu temaya geç'}
+            onClick={onToggleSheet}
+            className="flex w-full justify-center pb-1 pt-2.5"
+            aria-expanded={sheetExpanded}
+            aria-label={sheetExpanded ? 'Paneli küçült' : 'Paneli genişlet'}
           >
-            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+            <span className="h-1 w-10 rounded-full bg-border" aria-hidden="true" />
           </button>
+          <div className="flex items-stretch gap-1 px-3 pb-2">
+            <TabBtn Icon={Plus} label="Bildir" accent active={reportMode} onClick={onToggleReport} />
+            {VIEWS.map((v) => (
+              <TabBtn key={v.key} Icon={v.Icon} label={v.label === 'Bildirimler' ? 'Liste' : v.label === 'Resmî durum' ? 'Resmî' : v.label} active={activeView === v.key} onClick={() => onView(v.key)} />
+            ))}
+          </div>
         </div>
 
-        <button
-          type="button"
-          onClick={onToggleReport}
-          className={`mt-3 w-full ${reportMode ? 'btn-danger' : 'btn-primary'}`}
-          aria-pressed={reportMode}
+        {/* AKTİF GÖRÜNÜM */}
+        <div
+          className={`${sheetExpanded ? 'flex' : 'hidden'} min-h-0 min-w-0 flex-1 flex-col ${
+            panelCollapsed ? 'lg:hidden' : 'lg:flex'
+          }`}
         >
-          {reportMode ? <TriangleAlert size={16} /> : <Plus size={16} />}
-          {reportMode ? 'Bildirim modu açık — bir nokta seçin' : 'Engel bildir'}
-        </button>
-
-        {reportMode && (
-          <div className="mt-2 rounded-lg border border-border bg-surface-2 p-2.5 text-xs text-muted">
-            Haritada engelin olduğu yere dokunun. Fare kullanmadan eklemek için:
-            <button
-              type="button"
-              onClick={onDropAtCenter}
-              className="mt-2 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] font-semibold text-ink hover:bg-surface-2"
-            >
-              Harita merkezine pin bırak
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Açılır blok — mobilde genişletilince, masaüstünde her zaman */}
-      <div className={`${sheetExpanded ? 'flex' : 'hidden'} min-h-0 flex-1 flex-col lg:flex`}>
-        {/* İstatistik */}
-        <div className="grid shrink-0 grid-cols-4 gap-2 px-4 pb-3">
-          <Stat value={counts.total} label="Toplam" />
-          <Stat value={counts.rampa} label="Rampa" />
-          <Stat value={counts.asansor} label="Asansör" />
-          <Stat value={counts.calisma} label="Çalışma" />
-        </div>
-
-        {/* Resmî asansör verisi (Metro İstanbul) */}
-        <div className="shrink-0 px-4 pb-3">
-          <div className="rounded-xl border border-border bg-surface p-3">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
-                <ArrowUpDown size={13} aria-hidden="true" />
-                Resmî erişim durumu
-              </span>
-              <button
-                type="button"
-                onClick={onRefreshOfficial}
-                className="text-[11px] font-semibold text-brand hover:underline"
-              >
-                Yenile
-              </button>
-            </div>
-
-            {officialStatus === 'loading' && (
-              <p className="mt-2 text-xs text-muted">Metro İstanbul verisi yükleniyor…</p>
-            )}
-            {officialStatus === 'error' && (
-              <p className="mt-2 text-xs text-ramp">Resmî veriye şu an ulaşılamıyor.</p>
-            )}
-            {officialStatus === 'success' && official && (
-              <>
-                <p className={`mt-2 text-sm font-bold ${official.uskudar.accessible ? 'text-brand' : 'text-ramp'}`}>
-                  {official.uskudar.accessible
-                    ? 'Üsküdar: engelli erişimine uygun ✓'
-                    : `Üsküdar: erişim kısıtlı ⚠ (${official.uskudar.liftFaults} asansör arızalı)`}
-                </p>
-
-                <div className="mt-1.5 space-y-0.5 font-mono text-[11px] text-muted">
-                  <p>
-                    Asansör: {official.uskudar.liftOk}/{official.uskudar.liftTotal} çalışıyor
-                    {official.uskudar.liftFaults > 0 ? ` · ${official.uskudar.liftFaults} arıza` : ''}
-                  </p>
-                  <p>
-                    Yürüyen merdiven: {official.uskudar.escOk}/{official.uskudar.escTotal} çalışıyor
-                    {official.uskudar.escFaults > 0 ? ` · ${official.uskudar.escFaults} arıza` : ''}
-                  </p>
-                </div>
-
-                <p className={`mt-1.5 text-[11px] ${official.service ? 'text-ramp' : 'text-muted'}`}>
-                  {official.service ? `M5 aksama: ${official.service.description}` : 'M5 hattı: normal çalışıyor ✓'}
-                </p>
-
-                {official.m5Count > 0 && (
-                  <button
-                    type="button"
-                    onClick={onFitOfficial}
-                    className="mt-2 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] font-semibold text-ink hover:bg-surface-2"
-                  >
-                    M5 hattındaki {official.m5Count} arızayı haritada göster
-                  </button>
-                )}
-
-                <p className="mt-2 flex items-center gap-2 text-[10px] text-muted">
-                  <span className="inline-flex items-center gap-1">
-                    <span className="inline-block h-2.5 w-2.5 rounded-[3px] border-2" style={{ borderColor: '#DC2626' }} />
-                    Arıza
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="inline-block h-2.5 w-2.5 rounded-[3px] border-2" style={{ borderColor: '#64748B' }} />
-                    Revizyon
-                  </span>
-                </p>
-
-                <p className="mt-1.5 text-[10px] leading-snug text-muted">
-                  Kaynak: Metro İstanbul açık verisi ·{' '}
-                  {new Date(official.fetchedAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}{' '}
-                  güncellendi
-                </p>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Arama */}
-        <div className="shrink-0 px-4 pb-2">
-          <div className="relative">
-            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => onQuery(e.target.value)}
-              placeholder="Bildirimlerde ara"
-              aria-label="Bildirimlerde ara"
-              className="w-full rounded-lg border border-border bg-surface py-2 pl-9 pr-3 text-sm text-ink placeholder:text-muted/70"
-            />
-          </div>
-        </div>
-
-        {/* Filtre çipleri */}
-        <div className="flex shrink-0 gap-1.5 overflow-x-auto px-4 pb-2.5">
-          {FILTERS.map((f) => {
-            const active = filter === f.key;
-            return (
-              <button
-                key={f.key}
-                type="button"
-                onClick={() => onFilter(f.key)}
-                aria-pressed={active}
-                className={`chip ${active ? 'border-brand bg-brand text-white' : 'border-border bg-surface text-muted hover:text-ink'}`}
-              >
-                {f.Icon && <f.Icon size={13} style={{ color: active ? '#fff' : f.color }} aria-hidden="true" />}
-                {f.label}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Liste */}
-        <div className="flex items-center justify-between px-4 pb-1.5">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">Bildirimler</span>
-          <span className="font-mono text-[11px] text-muted">
-            {pins.length}/{totalCount}
-          </span>
-        </div>
-        <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-4 pb-4">
-          {pins.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted">
-              {totalCount === 0
-                ? 'Henüz bildirim yok. Haritaya bir engel ekleyerek başlayın.'
-                : 'Bu filtreye uygun bildirim yok.'}
-            </div>
-          ) : (
-            pins.map((pin) => (
-              <ObstacleCard
-                key={pin.id}
-                pin={pin}
-                selected={pin.id === selectedId}
-                now={now}
-                myVote={votes[pin.id]}
-                isOwn={pin.authorId === voterId}
-                onSelect={onSelect}
-                onConfirm={onConfirm}
-                onRefute={onRefute}
-                onShare={onShare}
-                onDelete={onDelete}
-              />
-            ))
-          )}
-        </div>
-
-        <div className="flex shrink-0 items-center justify-between border-t border-border px-4 py-2.5 font-mono text-[10px] text-muted">
-          <span>Katkınız: {points} puan</span>
-          <span>Engelsiz Üsküdar · {new Date().getFullYear()}</span>
+          {view}
         </div>
       </div>
     </div>
