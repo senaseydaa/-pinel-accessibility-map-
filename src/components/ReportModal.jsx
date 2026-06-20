@@ -1,19 +1,23 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { X, TriangleAlert } from 'lucide-react';
+import { X, TriangleAlert, Camera, Trash2 } from 'lucide-react';
 import { OBSTACLE_LIST } from '../data/obstacleTypes.js';
+import { fileToResizedDataURL } from '../lib/photo.js';
 
 // Erişilebilir engel bildirim diyaloğu: role="dialog" + aria-modal, odak tuzağı,
 // Esc ile kapatma, açılışta forma odak, kategori için radyo grubu.
+// Fotoğraf spam'e karşı zorunludur (kamera veya galeri; tarayıcıda küçültülür).
 export default function ReportModal({ coords, onClose, onSave }) {
   const [type, setType] = useState('rampa');
   const [notes, setNotes] = useState('');
+  const [photo, setPhoto] = useState(null);
+  const [photoErr, setPhotoErr] = useState(null);
   const dialogRef = useRef(null);
   const firstRef = useRef(null);
+  const fileRef = useRef(null);
   const titleId = useId();
 
   useEffect(() => {
     firstRef.current?.focus();
-
     const onKey = (e) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -21,12 +25,12 @@ export default function ReportModal({ coords, onClose, onSave }) {
         return;
       }
       if (e.key !== 'Tab') return;
-      const focusables = dialogRef.current?.querySelectorAll(
+      const f = dialogRef.current?.querySelectorAll(
         'button, [href], input, textarea, select, [tabindex]:not([tabindex="-1"])'
       );
-      if (!focusables || focusables.length === 0) return;
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
+      if (!f || f.length === 0) return;
+      const first = f[0];
+      const last = f[f.length - 1];
       if (e.shiftKey && document.activeElement === first) {
         e.preventDefault();
         last.focus();
@@ -35,14 +39,28 @@ export default function ReportModal({ coords, onClose, onSave }) {
         first.focus();
       }
     };
-
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  async function handleFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoErr(null);
+    try {
+      setPhoto(await fileToResizedDataURL(file));
+    } catch (err) {
+      setPhotoErr(err.message);
+    }
+  }
+
   const submit = (e) => {
     e.preventDefault();
-    onSave(type, notes.trim());
+    if (!photo) {
+      setPhotoErr('Spam’ı önlemek için fotoğraf zorunlu.');
+      return;
+    }
+    onSave(type, notes.trim(), photo);
   };
 
   return (
@@ -58,7 +76,7 @@ export default function ReportModal({ coords, onClose, onSave }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="flex w-full max-w-md flex-col rounded-t-2xl border border-border bg-surface shadow-pop sm:rounded-2xl"
+        className="flex max-h-[92dvh] w-full max-w-md flex-col overflow-y-auto rounded-t-2xl border border-border bg-surface shadow-pop sm:rounded-2xl"
       >
         <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
           <h2 id={titleId} className="flex items-center gap-2 text-base font-extrabold text-ink">
@@ -102,9 +120,7 @@ export default function ReportModal({ coords, onClose, onSave }) {
                     aria-checked={active}
                     onClick={() => setType(o.key)}
                     className={`flex items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
-                      active
-                        ? 'border-brand bg-brand/5'
-                        : 'border-border bg-surface hover:bg-surface-2'
+                      active ? 'border-brand bg-brand/5' : 'border-border bg-surface hover:bg-surface-2'
                     }`}
                   >
                     <Icon size={20} className="mt-0.5 shrink-0" style={{ color: o.color }} aria-hidden="true" />
@@ -117,6 +133,47 @@ export default function ReportModal({ coords, onClose, onSave }) {
               })}
             </div>
           </fieldset>
+
+          <div>
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
+              Fotoğraf <span className="font-normal normal-case text-muted">(zorunlu)</span>
+            </span>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleFile}
+              className="sr-only"
+              aria-label="Fotoğraf seç"
+            />
+            {photo ? (
+              <div className="relative">
+                <img src={photo} alt="Seçilen fotoğraf önizlemesi" className="h-40 w-full rounded-lg border border-border object-cover" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPhoto(null);
+                    if (fileRef.current) fileRef.current.value = '';
+                  }}
+                  className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-surface/90 px-2 py-1 text-[11px] font-semibold text-ink shadow-card hover:bg-surface"
+                >
+                  <Trash2 size={13} aria-hidden="true" />
+                  Kaldır
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-surface px-3 py-6 text-sm font-semibold text-muted hover:bg-surface-2"
+              >
+                <Camera size={18} aria-hidden="true" />
+                Fotoğraf çek veya seç
+              </button>
+            )}
+            {photoErr && <p className="mt-1.5 text-xs font-semibold text-ramp">{photoErr}</p>}
+          </div>
 
           <div>
             <label htmlFor="report-notes" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
@@ -137,7 +194,7 @@ export default function ReportModal({ coords, onClose, onSave }) {
           <button type="button" onClick={onClose} className="btn-ghost flex-1">
             Vazgeç
           </button>
-          <button type="submit" className="btn-primary flex-[2]">
+          <button type="submit" className="btn-primary flex-[2]" disabled={!photo}>
             Haritaya ekle
           </button>
         </div>

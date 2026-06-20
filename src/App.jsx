@@ -7,14 +7,20 @@ import Toast from './components/Toast.jsx';
 import { useLocalStorage } from './hooks/useLocalStorage.js';
 import { useGeolocation } from './hooks/useGeolocation.js';
 import { getType } from './data/obstacleTypes.js';
+import { distanceMeters } from './lib/geo.js';
+import { REFUTE_THRESHOLD, MERGE_RADIUS_M } from './lib/status.js';
 
 const MEYDAN = [41.0268, 29.0152];
 const LIFETIME_MIN = 240; // Bildirimler 4 saat canlı kalır; "Hâlâ duruyor" yeniler.
 
 // Üsküdar Meydanı çevresinden gerçekçi örnek bildirimler (yalnızca depo boşsa).
+// authorId 'seed' — yani benim bildirimim değil; bu yüzden silemem, yalnızca oylayabilirim.
 function seedPins() {
   const now = Date.now();
   const make = (agoMin, p) => ({
+    refutes: 0,
+    photo: null,
+    authorId: 'seed',
     ...p,
     createdAt: new Date(now - agoMin * 60000).toISOString(),
     expiresAt: new Date(now - agoMin * 60000 + LIFETIME_MIN * 60000).toISOString(),
@@ -25,6 +31,7 @@ function seedPins() {
       type: 'asansor',
       lat: 41.0264,
       lng: 29.0148,
+      confirms: 3,
       notes: 'Marmaray ana çıkışındaki engelli asansörü arıza nedeniyle servis dışı.',
     }),
     make(200, {
@@ -32,6 +39,7 @@ function seedPins() {
       type: 'rampa',
       lat: 41.0272,
       lng: 29.0156,
+      confirms: 1,
       notes: 'Vapur iskelesi karşısındaki kaldırım rampasının önüne motosikletler park edilmiş.',
     }),
     make(25, {
@@ -39,6 +47,7 @@ function seedPins() {
       type: 'calisma',
       lat: 41.0261,
       lng: 29.0162,
+      confirms: 4,
       notes: 'Mihrimah Sultan Camii arkasındaki sokak çalışması tekerlekli sandalye geçişini kapatıyor.',
     }),
   ];
@@ -47,6 +56,9 @@ function seedPins() {
 export default function App() {
   const [pins, setPins] = useLocalStorage('pinel.pins', seedPins);
   const [theme, setTheme] = useLocalStorage('pinel.theme', 'light');
+  const [votes, setVotes] = useLocalStorage('pinel.votes', {});
+  const [points, setPoints] = useLocalStorage('pinel.points', 0);
+  const [voterId] = useLocalStorage('pinel.voterId', () => `v-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`);
 
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
@@ -65,7 +77,6 @@ export default function App() {
   const toastId = useRef(0);
   const lastTrigger = useRef(null);
 
-  // Tema sınıfını uygula
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
@@ -107,7 +118,7 @@ export default function App() {
   function focusPin(pin) {
     setSelectedId(pin.id);
     fly([pin.lat, pin.lng], 18);
-    setSheetExpanded(false); // mobilde haritayı göster
+    setSheetExpanded(false);
   }
 
   function openReport(coords) {
@@ -117,10 +128,7 @@ export default function App() {
 
   function closeReport() {
     setModalCoords(null);
-    // Odağı tetikleyen öğeye geri ver
-    if (lastTrigger.current && lastTrigger.current.focus) {
-      lastTrigger.current.focus();
-    }
+    if (lastTrigger.current && lastTrigger.current.focus) lastTrigger.current.focus();
   }
 
   function handlePlace(latlng) {
@@ -132,8 +140,32 @@ export default function App() {
     if (c) openReport({ lat: c.lat, lng: c.lng });
   }
 
-  function saveObstacle(type, notes) {
+  function freshExpiry() {
+    return new Date(Date.now() + LIFETIME_MIN * 60000).toISOString();
+  }
+
+  function saveObstacle(type, notes, photo) {
     if (!modalCoords) return;
+    const coords = [modalCoords.lat, modalCoords.lng];
+
+    // Mükerrer birleştirme: yakında (MERGE_RADIUS_M) aynı kategori varsa yeni pin
+    // açma — mevcut bildirimi doğrula (+1 onay).
+    const dup = pins.find(
+      (p) => p.type === type && distanceMeters([p.lat, p.lng], coords) <= MERGE_RADIUS_M
+    );
+    if (dup) {
+      setPins((prev) =>
+        prev.map((p) => (p.id === dup.id ? { ...p, confirms: (p.confirms || 0) + 1, expiresAt: freshExpiry() } : p))
+      );
+      setVotes((v) => ({ ...v, [dup.id]: 'confirm' }));
+      setModalCoords(null);
+      setReportMode(false);
+      focusPin(dup);
+      setPoints((p) => p + 1);
+      showToast('Yakında aynı bildirim vardı — onu doğruladınız. (+1 onay)');
+      return;
+    }
+
     const created = Date.now();
     const pin = {
       id: `pin-${created}`,
@@ -141,43 +173,81 @@ export default function App() {
       lat: modalCoords.lat,
       lng: modalCoords.lng,
       notes: notes || 'Açıklama eklenmedi.',
+      photo: photo || null,
+      authorId: voterId,
+      confirms: 1, // sahibinin kendi onayı
+      refutes: 0,
       createdAt: new Date(created).toISOString(),
       expiresAt: new Date(created + LIFETIME_MIN * 60000).toISOString(),
     };
     setPins((prev) => [pin, ...prev]);
+    setVotes((v) => ({ ...v, [pin.id]: 'confirm' }));
     setModalCoords(null);
     setReportMode(false);
     focusPin(pin);
-    showToast(`${getType(type).label} haritaya eklendi.`);
+    setPoints((p) => p + 5);
+    showToast(`${getType(type).label} eklendi. (+5 puan)`);
   }
 
-  function confirmPin(id) {
-    setPins((prev) =>
-      prev.map((p) =>
-        p.id === id ? { ...p, expiresAt: new Date(Date.now() + LIFETIME_MIN * 60000).toISOString() } : p
-      )
-    );
-    showToast('Bildirim hâlâ geçerli olarak işaretlendi.');
+  // Bağımsız topluluk oyu (admin yok). Aynı oy tekrarlanamaz; oy değiştirilebilir.
+  function castVote(pinId, kind) {
+    const prev = votes[pinId];
+    if (prev === kind) {
+      showToast('Bu bildirimi zaten oyladınız.', 'info');
+      return;
+    }
+    const pin = pins.find((p) => p.id === pinId);
+    if (!pin) return;
+
+    let confirms = pin.confirms || 0;
+    let refutes = pin.refutes || 0;
+    if (prev === 'confirm') confirms = Math.max(0, confirms - 1);
+    if (prev === 'refute') refutes = Math.max(0, refutes - 1);
+    if (kind === 'confirm') confirms += 1;
+    else refutes += 1;
+
+    const willRemove = kind === 'refute' && refutes >= REFUTE_THRESHOLD;
+
+    if (willRemove) {
+      setPins((prevPins) => prevPins.filter((p) => p.id !== pinId));
+      if (selectedId === pinId) setSelectedId(null);
+    } else {
+      setPins((prevPins) =>
+        prevPins.map((p) =>
+          p.id === pinId
+            ? { ...p, confirms, refutes, ...(kind === 'confirm' ? { expiresAt: freshExpiry() } : {}) }
+            : p
+        )
+      );
+    }
+    setVotes((v) => ({ ...v, [pinId]: kind }));
+    const earned = !prev ? ' (+1 puan)' : '';
+    if (!prev) setPoints((p) => p + 1);
+
+    if (willRemove) showToast(`Yeterli "kalktı" oyu — bildirim topluluk tarafından kaldırıldı.${earned}`);
+    else if (kind === 'confirm') showToast(`Doğruladınız, süre yenilendi.${earned}`);
+    else showToast(`"Kalktı" oyunuz alındı.${earned}`);
   }
 
   function deletePin(id) {
+    const pin = pins.find((p) => p.id === id);
+    if (!pin || pin.authorId !== voterId) return; // yalnızca kendi bildirimini silebilir
     setPins((prev) => prev.filter((p) => p.id !== id));
     if (selectedId === id) setSelectedId(null);
-    showToast('Bildirim silindi.');
+    showToast('Bildiriminiz silindi.');
   }
 
   async function sharePin(pin) {
     const url = `${window.location.origin}${window.location.pathname}?pin=${pin.id}`;
     const text = `PINel — ${getType(pin.type).label} (Üsküdar)`;
     try {
-      if (navigator.share) {
-        await navigator.share({ title: 'PINel', text, url });
-      } else {
+      if (navigator.share) await navigator.share({ title: 'PINel', text, url });
+      else {
         await navigator.clipboard.writeText(url);
         showToast('Bağlantı panoya kopyalandı.');
       }
     } catch {
-      /* kullanıcı paylaşımı iptal etti — sessizce geç */
+      /* kullanıcı iptal etti */
     }
   }
 
@@ -205,7 +275,6 @@ export default function App() {
     setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
   }
 
-  // Türetilmiş veriler
   const counts = useMemo(() => {
     const c = { total: pins.length, rampa: 0, asansor: 0, calisma: 0 };
     pins.forEach((p) => {
@@ -219,8 +288,7 @@ export default function App() {
     return pins.filter((p) => {
       if (filter !== 'all' && p.type !== filter) return false;
       if (!q) return true;
-      const hay = `${p.notes} ${getType(p.type).label}`.toLocaleLowerCase('tr');
-      return hay.includes(q);
+      return `${p.notes} ${getType(p.type).label}`.toLocaleLowerCase('tr').includes(q);
     });
   }, [pins, filter, query]);
 
@@ -233,7 +301,6 @@ export default function App() {
         Bildirim paneline geç
       </a>
 
-      {/* Harita alanı */}
       <main className={`absolute inset-0 lg:static lg:flex-1 ${reportMode ? 'cursor-crosshair' : ''}`}>
         <MapView
           center={MEYDAN}
@@ -243,29 +310,28 @@ export default function App() {
           flyTarget={flyTarget}
           userCoords={userCoords}
           now={now}
+          votes={votes}
+          voterId={voterId}
           onMapReady={(m) => {
             mapRef.current = m;
           }}
           onPlace={handlePlace}
           onSelect={focusPin}
-          onConfirm={confirmPin}
+          onConfirm={(id) => castVote(id, 'confirm')}
+          onRefute={(id) => castVote(id, 'refute')}
           onDelete={deletePin}
         />
 
-        {/* Durum şeridi */}
         <div className="pointer-events-none absolute left-1/2 top-3 z-[600] flex max-w-[calc(100%-7rem)] -translate-x-1/2 justify-center">
           <p
             className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold shadow-card ${
-              reportMode
-                ? 'border-ramp/40 bg-surface text-ramp'
-                : 'border-border bg-surface text-muted'
+              reportMode ? 'border-ramp/40 bg-surface text-ramp' : 'border-border bg-surface text-muted'
             }`}
           >
-            {reportMode ? 'Engelin olduğu noktaya dokunun' : 'Üsküdar Meydanı · canlı erişilebilirlik katmanı'}
+            {reportMode ? 'Engelin olduğu noktaya dokunun' : 'Üsküdar Meydanı · erişilebilirlik katmanı'}
           </p>
         </div>
 
-        {/* Harita kontrolleri */}
         <div className="absolute right-3 top-3 z-[600] flex flex-col gap-2">
           <button
             type="button"
@@ -287,7 +353,6 @@ export default function App() {
         </div>
       </main>
 
-      {/* Yan panel / mobil alt çekmece */}
       <aside
         id="bildirim-paneli"
         className="fixed inset-x-0 bottom-0 z-[1000] flex max-h-[88dvh] flex-col rounded-t-2xl border-t border-border bg-surface shadow-sheet lg:static lg:h-full lg:max-h-none lg:w-96 lg:rounded-none lg:border-r lg:border-t-0 lg:shadow-none"
@@ -295,6 +360,7 @@ export default function App() {
       >
         <Sidebar
           counts={counts}
+          points={points}
           reportMode={reportMode}
           onToggleReport={toggleReport}
           onDropAtCenter={dropPinAtCenter}
@@ -306,8 +372,11 @@ export default function App() {
           totalCount={pins.length}
           selectedId={selectedId}
           now={now}
+          votes={votes}
+          voterId={voterId}
           onSelect={focusPin}
-          onConfirm={confirmPin}
+          onConfirm={(id) => castVote(id, 'confirm')}
+          onRefute={(id) => castVote(id, 'refute')}
           onShare={sharePin}
           onDelete={deletePin}
           theme={theme}
@@ -317,9 +386,7 @@ export default function App() {
         />
       </aside>
 
-      {modalCoords && (
-        <ReportModal coords={modalCoords} onClose={closeReport} onSave={saveObstacle} />
-      )}
+      {modalCoords && <ReportModal coords={modalCoords} onClose={closeReport} onSave={saveObstacle} />}
 
       <Toast toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
     </div>

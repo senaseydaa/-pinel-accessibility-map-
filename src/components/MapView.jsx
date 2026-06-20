@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
-import { Check, Trash2 } from 'lucide-react';
+import { Check, X, Trash2 } from 'lucide-react';
 import { makeMarkerIcon, makeUserIcon } from '../lib/mapIcons.js';
 import CategoryBadge from './CategoryBadge.jsx';
+import { getType } from '../data/obstacleTypes.js';
+import { getStatus } from '../lib/status.js';
 import { timeAgo, remaining } from '../lib/time.js';
 
 // Harita örneğini dışarı verir (merkeze pin / konuma uçma için gerekir).
@@ -10,7 +12,6 @@ function MapReady({ onReady }) {
   const map = useMap();
   useEffect(() => {
     onReady(map);
-    // İlk yerleşimden sonra boyutu doğrula (panel/sheet düzeni için).
     const t = setTimeout(() => map.invalidateSize(), 200);
     return () => clearTimeout(t);
   }, [map, onReady]);
@@ -47,19 +48,17 @@ export default function MapView({
   flyTarget,
   userCoords,
   now,
+  votes,
+  voterId,
   onMapReady,
   onPlace,
   onSelect,
   onConfirm,
+  onRefute,
   onDelete,
 }) {
   return (
-    <MapContainer
-      center={center}
-      zoom={17}
-      maxZoom={19}
-      className="h-full w-full"
-    >
+    <MapContainer center={center} zoom={17} maxZoom={19} className="h-full w-full">
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> katkıda bulunanlar'
         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -80,6 +79,9 @@ export default function MapView({
 
       {pins.map((pin) => {
         const rem = remaining(pin.expiresAt, now);
+        const status = getStatus(pin);
+        const myVote = votes[pin.id];
+        const isOwn = pin.authorId === voterId;
         return (
           <Marker
             key={pin.id}
@@ -88,29 +90,55 @@ export default function MapView({
             eventHandlers={{ click: () => onSelect(pin) }}
           >
             <Popup>
-              <div className="min-w-[12rem]">
-                <CategoryBadge typeKey={pin.type} />
+              <div className="min-w-[13rem]">
+                <div className="flex items-center justify-between gap-2">
+                  <CategoryBadge typeKey={pin.type} />
+                  <span className={`text-[10px] font-semibold ${status.key === 'confirmed' ? 'text-brand' : 'text-muted'}`}>
+                    {status.label}
+                  </span>
+                </div>
+                {pin.photo && (
+                  <img
+                    src={pin.photo}
+                    alt={`${getType(pin.type).label} fotoğrafı`}
+                    className="mt-2 h-24 w-full rounded-md border border-border object-cover"
+                  />
+                )}
                 <p className="mt-1.5 text-[13px] leading-relaxed text-muted">{pin.notes}</p>
                 <p className="mt-1.5 font-mono text-[11px] text-muted">
-                  {timeAgo(pin.createdAt, now)} · kalan {rem.label}
+                  {pin.confirms || 0} onay · {timeAgo(pin.createdAt, now)} · kalan {rem.label}
                 </p>
                 <div className="mt-2 flex gap-2">
                   <button
                     type="button"
                     onClick={() => onConfirm(pin.id)}
-                    className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-semibold text-ink hover:bg-surface-2"
+                    className={`inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-semibold hover:bg-surface-2 ${
+                      myVote === 'confirm' ? 'text-brand' : 'text-ink'
+                    }`}
                   >
-                    <Check size={13} className="text-brand" aria-hidden="true" />
+                    <Check size={13} aria-hidden="true" />
                     Hâlâ duruyor
                   </button>
                   <button
                     type="button"
-                    onClick={() => onDelete(pin.id)}
-                    className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-semibold text-ink hover:bg-surface-2 hover:text-ramp"
+                    onClick={() => onRefute(pin.id)}
+                    className={`inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] font-semibold hover:bg-surface-2 ${
+                      myVote === 'refute' ? 'text-ramp' : 'text-ink'
+                    }`}
                   >
-                    <Trash2 size={13} aria-hidden="true" />
-                    Sil
+                    <X size={13} aria-hidden="true" />
+                    Kalktı
                   </button>
+                  {isOwn && (
+                    <button
+                      type="button"
+                      onClick={() => onDelete(pin.id)}
+                      className="ml-auto inline-flex items-center rounded-md border border-border p-1.5 text-muted hover:bg-surface-2 hover:text-ramp"
+                      aria-label="Kendi bildirimini sil"
+                    >
+                      <Trash2 size={13} aria-hidden="true" />
+                    </button>
+                  )}
                 </div>
               </div>
             </Popup>

@@ -22,6 +22,7 @@ function Stat({ value, label }) {
 
 export default function Sidebar({
   counts,
+  points,
   reportMode,
   onToggleReport,
   onDropAtCenter,
@@ -33,8 +34,11 @@ export default function Sidebar({
   totalCount,
   selectedId,
   now,
+  votes,
+  voterId,
   onSelect,
   onConfirm,
+  onRefute,
   onShare,
   onDelete,
   theme,
@@ -62,12 +66,7 @@ export default function Sidebar({
             <Accessibility size={20} aria-hidden="true" />
           </span>
           <div className="min-w-0">
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-lg font-extrabold tracking-tight text-ink">PINel</span>
-              <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-brand">
-                canlı katman
-              </span>
-            </div>
+            <span className="text-lg font-extrabold tracking-tight text-ink">PINel</span>
             <p className="truncate text-xs text-muted">Üsküdar Meydanı · Erişilebilirlik haritası</p>
           </div>
           <button
@@ -169,8 +168,11 @@ export default function Sidebar({
                 pin={pin}
                 selected={pin.id === selectedId}
                 now={now}
+                myVote={votes[pin.id]}
+                isOwn={pin.authorId === voterId}
                 onSelect={onSelect}
                 onConfirm={onConfirm}
+                onRefute={onRefute}
                 onShare={onShare}
                 onDelete={onDelete}
               />
@@ -178,8 +180,9 @@ export default function Sidebar({
           )}
         </div>
 
-        <div className="shrink-0 border-t border-border px-4 py-2.5 text-center font-mono text-[10px] text-muted">
-          PINel · Engelsiz Üsküdar · {new Date().getFullYear()}
+        <div className="flex shrink-0 items-center justify-between border-t border-border px-4 py-2.5 font-mono text-[10px] text-muted">
+          <span>Katkınız: {points} puan</span>
+          <span>Engelsiz Üsküdar · {new Date().getFullYear()}</span>
         </div>
       </div>
     </div>
