@@ -103,7 +103,7 @@ export default function ReportModal({ coords, onClose, onSave }) {
                     onClick={() => setType(o.key)}
                     className={`flex items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
                       active
-                        ? 'border-brand bg-brand/5 ring-1 ring-brand'
+                        ? 'border-brand bg-brand/5'
                         : 'border-border bg-surface hover:bg-surface-2'
                     }`}
                   >

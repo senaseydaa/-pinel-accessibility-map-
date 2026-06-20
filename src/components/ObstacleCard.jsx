@@ -1,20 +1,17 @@
 import { Navigation, Check, Share2, Trash2 } from 'lucide-react';
 import CategoryBadge from './CategoryBadge.jsx';
-import { getType } from '../data/obstacleTypes.js';
 import { timeAgo, remaining } from '../lib/time.js';
 
-// Tek bildirim kartı. Sol kenarda kategori renkli ince çizgi (grafik öğe),
-// başlıkta rozet + göreli zaman (monospace), altta canlılık ve eylemler.
+// Tek bildirim kartı. Kategori, başlıktaki renkli ikonla verilir (renkli şerit/halka
+// yok); seçim ince teal kenar + çok hafif zeminle gösterilir.
 export default function ObstacleCard({ pin, selected, now, onSelect, onConfirm, onShare, onDelete }) {
-  const t = getType(pin.type);
   const rem = remaining(pin.expiresAt, now);
 
   return (
     <article
       className={`overflow-hidden rounded-xl border bg-surface shadow-card transition-colors ${
-        selected ? 'border-brand ring-1 ring-brand' : 'border-border hover:border-muted/60'
+        selected ? 'border-brand bg-brand/5' : 'border-border hover:border-muted/60'
       }`}
-      style={{ borderLeftWidth: '3px', borderLeftColor: t.color }}
       aria-current={selected ? 'true' : undefined}
     >
       <button
