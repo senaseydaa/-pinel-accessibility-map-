@@ -100,6 +100,7 @@ export default function App() {
   const lastTrigger = useRef(null);
   const showInfraRef = useRef(false);
   const infraTimer = useRef(null);
+  const infraReqId = useRef(0);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -177,9 +178,11 @@ export default function App() {
 
   function loadInfra() {
     const v = currentView();
+    const id = ++infraReqId.current; // yalnızca en son istek uygulanır
     setInfraStatus('loading');
     fetchOsmInfra(v.lat.toFixed(5), v.lng.toFixed(5), v.radius)
       .then((data) => {
+        if (id !== infraReqId.current) return; // eski yanıt — yok say
         // Anadolu yakası dışındaki noktaları gizle
         const inside = boundary?.rings
           ? data.items.filter((i) => pointInRings([i.lat, i.lng], boundary.rings))
@@ -189,17 +192,32 @@ export default function App() {
         setInfra({ ...data, items: inside, byKind, count: inside.length });
         setInfraStatus('success');
       })
-      .catch((err) => {
+      .catch(() => {
+        if (id !== infraReqId.current) return; // eski hata — toast yok
         setInfraStatus('error');
-        showToast(err.message, 'error');
+        showToast('Erişilebilir altyapı şu an yüklenemedi.', 'error');
       });
+  }
+
+  // Tek-istek: toggle + fly + moveend çağrılarını tek yüklemede topla (debounce)
+  function requestInfra() {
+    clearTimeout(infraTimer.current);
+    infraTimer.current = setTimeout(loadInfra, 500);
   }
 
   function toggleInfra() {
     const next = !showInfra;
     setShowInfra(next);
     showInfraRef.current = next;
-    if (next) loadInfra();
+    if (next) {
+      // Konuma yaklaş — yakındaki erişilebilir altyapıyı net göster (uzaklaşma yok)
+      const m = mapRef.current;
+      if (m) {
+        const target = userCoords || [m.getCenter().lat, m.getCenter().lng];
+        fly(target, Math.max(m.getZoom(), 16));
+      }
+      requestInfra();
+    }
   }
 
   function focusInfra(coords) {
@@ -209,11 +227,9 @@ export default function App() {
     setSheetExpanded(false); // fly → moveend → otomatik yeniden yükler
   }
 
-  // Harita gezilince (katman açıksa) yakındaki altyapıyı yeniden yükle
+  // Harita gezilince (katman açıksa) yakındaki altyapıyı yeniden yükle (debounce'lu)
   function handleMapMove() {
-    if (!showInfraRef.current) return;
-    clearTimeout(infraTimer.current);
-    infraTimer.current = setTimeout(loadInfra, 700);
+    if (showInfraRef.current) requestInfra();
   }
 
   function showToast(message, type = 'success') {

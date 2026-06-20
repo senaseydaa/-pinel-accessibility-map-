@@ -23,7 +23,11 @@ function MapReady({ onReady }) {
     onReady(map);
     const t = setTimeout(() => map.invalidateSize(), 200);
     return () => clearTimeout(t);
-  }, [map, onReady]);
+    // Sadece harita hazır olunca BİR KEZ çalışsın — onReady her render'da yeni referans
+    // olduğu için bağımlılığa konmaz (yoksa her state değişiminde harita Anadolu geneline
+    // geri çekiliyordu: konuma uçup hemen geri dönme bug'ı).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map]);
   return null;
 }
 
