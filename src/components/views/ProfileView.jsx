@@ -39,6 +39,14 @@ export default function ProfileView({ theme, onToggleTheme, points }) {
             <span>Resmî asansör/merdiven arızası <span className="text-muted">(Metro İstanbul)</span></span>
           </div>
           <div className="flex items-center gap-2">
+            <span className="inline-block h-3 w-3 rounded-full border-2 border-white" style={{ backgroundColor: '#0F766E' }} />
+            <span>Erişilebilir altyapı <span className="text-muted">(OSM: rampa, asansör, tuvalet…)</span></span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="inline-block h-3 w-3 rounded-full border-2 border-white" style={{ backgroundColor: '#DC2626' }} />
+            <span>Erişime kapalı yer <span className="text-muted">(OSM)</span></span>
+          </div>
+          <div className="flex items-center gap-2">
             <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-brand" />
             <span>Konumunuz</span>
           </div>

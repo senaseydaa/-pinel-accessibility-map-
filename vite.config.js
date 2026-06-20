@@ -1,16 +1,17 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { getMetroData } from './netlify/functions/_metroCore.mjs'
+import { getAccessibleInfra } from './netlify/functions/_osmCore.mjs'
 
-// Yerel geliştirme için /api/metro: prod'daki Netlify Function ile aynı çekirdeği
-// çalıştırır, böylece dev'de de gerçek resmî veri (CORS'suz) gelir.
-function metroDevApi() {
+// Yerel geliştirme için /api/* : prod'daki Netlify Function'larla aynı çekirdeği
+// çalıştırır, böylece dev'de de gerçek veri (CORS'suz) gelir.
+function devApi(path, fn) {
   return {
-    name: 'metro-dev-api',
+    name: `dev-api${path.replace(/\//g, '-')}`,
     configureServer(server) {
-      server.middlewares.use('/api/metro', async (_req, res) => {
+      server.middlewares.use(path, async (_req, res) => {
         try {
-          const data = await getMetroData()
+          const data = await fn()
           res.setHeader('Content-Type', 'application/json; charset=utf-8')
           res.end(JSON.stringify(data))
         } catch (e) {
@@ -25,6 +26,6 @@ function metroDevApi() {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), metroDevApi()],
+  plugins: [react(), devApi('/api/metro', getMetroData), devApi('/api/osm', getAccessibleInfra)],
   base: './',
 })

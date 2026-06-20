@@ -69,6 +69,19 @@ export function makeOfficialIcon(group, type, selected = false) {
   });
 }
 
+// OSM erişilebilir altyapı — küçük nokta katmanı (damla/kareden ayrı, daha sönük).
+// Erişilebilir altyapı teal, "erişime kapalı" kırmızı.
+export function makeInfraIcon(kind) {
+  const color = kind === 'inaccessible' ? '#DC2626' : '#0F766E';
+  return L.divIcon({
+    className: 'pinel-marker',
+    html: `<div style="width:13px;height:13px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 2px rgba(20,24,28,0.3);"></div>`,
+    iconSize: [13, 13],
+    iconAnchor: [7, 7],
+    popupAnchor: [0, -7],
+  });
+}
+
 // "Konumumuz" işareti — marka renginde sade nokta + beyaz halka.
 export function makeUserIcon() {
   return L.divIcon({

@@ -4,8 +4,13 @@
   publish = "dist"
   functions = "netlify/functions"
 
-# Client her zaman /api/metro çağırır; prod'da bu Netlify Function'a gider.
+# Client /api/metro ve /api/osm çağırır; prod'da bunlar Netlify Function'lara gider.
 [[redirects]]
   from = "/api/metro"
   to = "/.netlify/functions/metro"
+  status = 200
+
+[[redirects]]
+  from = "/api/osm"
+  to = "/.netlify/functions/osm"
   status = 200

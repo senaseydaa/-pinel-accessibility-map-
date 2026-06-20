@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import { Check, X, Trash2, ArrowUpDown } from 'lucide-react';
-import { makeMarkerIcon, makeUserIcon, makeOfficialIcon } from '../lib/mapIcons.js';
+import { makeMarkerIcon, makeUserIcon, makeOfficialIcon, makeInfraIcon } from '../lib/mapIcons.js';
 import CategoryBadge from './CategoryBadge.jsx';
 import { getType } from '../data/obstacleTypes.js';
 import { getStatus } from '../lib/status.js';
@@ -52,6 +52,7 @@ export default function MapView({
   votes,
   voterId,
   officialItems = [],
+  infraItems = [],
   onMapReady,
   onPlace,
   onSelect,
@@ -70,6 +71,18 @@ export default function MapView({
       <MapReady onReady={onMapReady} />
       <ClickCapture active={reportMode} onPlace={onPlace} />
       <FlyTo target={flyTarget} />
+
+      {infraItems.map((o) => (
+        <Marker key={o.id} position={[o.lat, o.lng]} icon={makeInfraIcon(o.kind)} keyboard={false}>
+          <Popup>
+            <div className="min-w-[10rem]">
+              <span className={`text-sm font-semibold ${o.kind === 'inaccessible' ? 'text-ramp' : 'text-brand'}`}>{o.label}</span>
+              {o.name && <p className="text-[13px] text-ink">{o.name}</p>}
+              <p className="mt-1 text-[11px] text-muted">Kaynak: OpenStreetMap</p>
+            </div>
+          </Popup>
+        </Marker>
+      ))}
 
       {userCoords && (
         <Marker position={userCoords} icon={makeUserIcon()} keyboard={false}>

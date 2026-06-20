@@ -89,6 +89,12 @@ body {
   background: none;
   border: none;
 }
+/* Bildirim modunda harita imleci hedefleme (artı) olsun — kullanıcı işaretleyeceğini hissetsin */
+.reporting .leaflet-container,
+.reporting .leaflet-grab,
+.reporting .leaflet-interactive {
+  cursor: crosshair !important;
+}
 /* Koyu temada haritayı hafifçe sakinleştir (parıltı değil, yalnızca parlaklık) */
 .dark .leaflet-tile {
   filter: brightness(0.86) contrast(1.02);

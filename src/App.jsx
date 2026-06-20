@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { LocateFixed, Crosshair } from 'lucide-react';
+import { LocateFixed, Crosshair, Accessibility } from 'lucide-react';
 import MapView from './components/MapView.jsx';
 import Sidebar from './components/Sidebar.jsx';
 import ReportModal from './components/ReportModal.jsx';
@@ -10,6 +10,7 @@ import { getType } from './data/obstacleTypes.js';
 import { distanceMeters } from './lib/geo.js';
 import { REFUTE_THRESHOLD, MERGE_RADIUS_M } from './lib/status.js';
 import { fetchMetro } from './lib/metro.js';
+import { fetchOsmInfra } from './lib/osm.js';
 
 const MEYDAN = [41.0268, 29.0152];
 const LIFETIME_MIN = 240; // Bildirimler 4 saat canlı kalır; "Hâlâ duruyor" yeniler.
@@ -74,6 +75,9 @@ export default function App() {
   const [officialStatus, setOfficialStatus] = useState('idle');
   const [activeView, setActiveView] = useState('reports');
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const [infra, setInfra] = useState(null);
+  const [infraStatus, setInfraStatus] = useState('idle');
+  const [showInfra, setShowInfra] = useState(false);
 
   const { coords: userCoords, locate, status: geoStatus } = useGeolocation();
 
@@ -133,6 +137,25 @@ export default function App() {
       { padding: [48, 48], maxZoom: 15 }
     );
     setSheetExpanded(false);
+  }
+
+  function toggleInfra() {
+    const next = !showInfra;
+    setShowInfra(next);
+    if (next && !infra && infraStatus !== 'loading') {
+      setInfraStatus('loading');
+      fetchOsmInfra()
+        .then((data) => {
+          setInfra(data);
+          setInfraStatus('success');
+          showToast(`Erişilebilir altyapı yüklendi (${data.count} nokta).`);
+        })
+        .catch((err) => {
+          setInfraStatus('error');
+          setShowInfra(false);
+          showToast(err.message, 'error');
+        });
+    }
   }
 
   function showToast(message, type = 'success') {
@@ -295,14 +318,14 @@ export default function App() {
   }
 
   function toggleReport() {
-    setReportMode((v) => {
-      const next = !v;
-      if (next) {
-        setSheetExpanded(false);
-        showToast('Bildirim modu açık. Haritada engelin olduğu yere dokunun.', 'info');
-      }
-      return next;
-    });
+    // Yan etkiyi updater dışında çalıştır — StrictMode updater'ı iki kez çağırınca
+    // çift toast çıkıyordu.
+    const next = !reportMode;
+    setReportMode(next);
+    if (next) {
+      setSheetExpanded(false);
+      showToast('Bildirim modu açık. Haritada engelin olduğu yere dokunun.', 'info');
+    }
   }
 
   function locateMe() {
@@ -344,7 +367,7 @@ export default function App() {
         Bildirim paneline geç
       </a>
 
-      <main className={`absolute inset-0 lg:static lg:flex-1 ${reportMode ? 'cursor-crosshair' : ''}`}>
+      <main className={`absolute inset-0 lg:relative lg:flex-1 ${reportMode ? 'reporting cursor-crosshair' : ''}`}>
         <MapView
           center={MEYDAN}
           pins={pins}
@@ -356,6 +379,7 @@ export default function App() {
           votes={votes}
           voterId={voterId}
           officialItems={official?.items || []}
+          infraItems={showInfra ? infra?.items || [] : []}
           onMapReady={(m) => {
             mapRef.current = m;
           }}
@@ -402,6 +426,16 @@ export default function App() {
             aria-label="Üsküdar Meydanı'na dön"
           >
             <Crosshair size={17} />
+          </button>
+          <button
+            type="button"
+            onClick={toggleInfra}
+            className={`icon-btn shadow-card ${showInfra ? 'border-brand text-brand' : ''}`}
+            aria-label="Erişilebilir altyapı katmanını göster/gizle"
+            aria-pressed={showInfra}
+            aria-busy={infraStatus === 'loading'}
+          >
+            <Accessibility size={17} />
           </button>
         </div>
       </main>
