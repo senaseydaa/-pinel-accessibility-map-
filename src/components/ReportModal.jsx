@@ -88,9 +88,9 @@ export default function ReportModal({ coords, onClose, onSave }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="flex max-h-[92dvh] w-full max-w-md flex-col overflow-y-auto rounded-t-2xl border border-border bg-surface shadow-pop sm:rounded-2xl"
+        className="flex max-h-[92dvh] w-full max-w-md flex-col overflow-y-auto overscroll-contain rounded-t-2xl border border-border bg-surface shadow-pop sm:rounded-2xl"
       >
-        <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-surface px-5 py-3.5">
           <h2 id={titleId} ref={titleRef} tabIndex={-1} className="flex items-center gap-2 text-base font-extrabold text-ink outline-none">
             <TriangleAlert size={18} className="text-ramp" aria-hidden="true" />
             Yeni engel bildir
@@ -201,7 +201,7 @@ export default function ReportModal({ coords, onClose, onSave }) {
           </div>
         </div>
 
-        <div className="flex gap-2 border-t border-border px-5 py-3.5">
+        <div className="sticky bottom-0 z-10 flex gap-2 border-t border-border bg-surface px-5 py-3.5">
           <button type="button" onClick={onClose} className="btn-ghost flex-1">
             Vazgeç
           </button>
