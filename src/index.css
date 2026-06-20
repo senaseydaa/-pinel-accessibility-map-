@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---- Tasarım jetonları (açık / koyu tema) ---- */
+:root {
+  --bg: #f4f6f7;
+  --surface: #ffffff;
+  --surface-2: #eef1f2;
+  --border: #e1e6e9;
+  --text: #14181c;
+  --muted: #58636c;
+}
+.dark {
+  --bg: #0e1316;
+  --surface: #161d22;
+  --surface-2: #1c242a;
+  --border: #28333b;
+  --text: #e7ecef;
+  --muted: #93a1ac;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Tekrar eden bileşen sınıfları ---- */
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-brand text-white hover:bg-brand-hover;
+  }
+  .btn-ghost {
+    @apply btn border border-border bg-surface text-ink hover:bg-surface-2;
+  }
+  .btn-danger {
+    @apply btn bg-ramp text-white hover:bg-ramp-strong;
+  }
+  .icon-btn {
+    @apply inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface text-ink transition-colors hover:bg-surface-2;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors;
+  }
+}
+
+/* ---- Görünür klavye odağı (her yerde) ---- */
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid #0f766e;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ---- Leaflet uyumları ---- */
+.leaflet-container {
+  font-family: inherit;
+  background: var(--surface-2);
+}
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+.leaflet-popup-content-wrapper {
+  border-radius: 12px;
+  box-shadow: 0 6px 24px rgba(20, 24, 28, 0.14);
+  background: var(--surface);
+  color: var(--text);
+}
+.leaflet-popup-tip {
+  background: var(--surface);
+}
+.leaflet-popup-content {
+  margin: 12px 14px;
+}
+.pinel-marker {
+  background: none;
+  border: none;
+}
+/* Koyu temada haritayı hafifçe sakinleştir (parıltı değil, yalnızca parlaklık) */
+.dark .leaflet-tile {
+  filter: brightness(0.86) contrast(1.02);
+}
+
+/* ---- Azaltılmış hareket tercihi ---- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
