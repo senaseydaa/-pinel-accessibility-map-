@@ -87,6 +87,19 @@ export function makeInfraIcon(kind, label) {
   });
 }
 
+// Rota başlangıç/hedef işareti.
+export function makeRoutePoint(kind) {
+  const color = kind === 'start' ? '#0F766E' : '#EA580C';
+  const label = kind === 'start' ? 'Rota başlangıcı' : 'Rota hedefi';
+  return L.divIcon({
+    className: 'pinel-marker',
+    html: `<div role="img" aria-label="${label}" style="width:20px;height:20px;border-radius:50%;background:${color};border:3px solid #fff;box-shadow:0 2px 4px rgba(20,24,28,0.45);"></div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+    popupAnchor: [0, -10],
+  });
+}
+
 // "Konumumuz" işareti — marka renginde sade nokta + beyaz halka.
 export function makeUserIcon() {
   return L.divIcon({

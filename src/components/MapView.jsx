@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
-import { Check, X, Trash2, ArrowUpDown } from 'lucide-react';
-import { makeMarkerIcon, makeUserIcon, makeOfficialIcon, makeInfraIcon } from '../lib/mapIcons.js';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet';
+import { Check, X, Trash2, ArrowUpDown, Navigation } from 'lucide-react';
+import { makeMarkerIcon, makeUserIcon, makeOfficialIcon, makeInfraIcon, makeRoutePoint } from '../lib/mapIcons.js';
 import CategoryBadge from './CategoryBadge.jsx';
 import { getType } from '../data/obstacleTypes.js';
 import { getStatus } from '../lib/status.js';
@@ -53,12 +53,16 @@ export default function MapView({
   voterId,
   officialItems = [],
   infraItems = [],
+  route,
+  routeStart,
+  routeEnd,
   onMapReady,
   onPlace,
   onSelect,
   onConfirm,
   onRefute,
   onDelete,
+  onRouteTo,
 }) {
   return (
     <MapContainer center={center} zoom={17} maxZoom={19} className="h-full w-full">
@@ -72,6 +76,15 @@ export default function MapView({
       <ClickCapture active={reportMode} onPlace={onPlace} />
       <FlyTo target={flyTarget} />
 
+      {route?.coords?.length > 1 && (
+        <>
+          <Polyline positions={route.coords} pathOptions={{ color: '#ffffff', weight: 9, opacity: 0.9 }} />
+          <Polyline positions={route.coords} pathOptions={{ color: '#0F766E', weight: 5, opacity: 0.95 }} />
+        </>
+      )}
+      {routeStart && <Marker position={routeStart} icon={makeRoutePoint('start')} keyboard={false} />}
+      {routeEnd && <Marker position={routeEnd} icon={makeRoutePoint('end')} keyboard={false} />}
+
       {infraItems.map((o) => (
         <Marker key={o.id} position={[o.lat, o.lng]} icon={makeInfraIcon(o.kind, o.name ? `${o.label}, ${o.name}` : o.label)} keyboard={false}>
           <Popup>
@@ -79,6 +92,13 @@ export default function MapView({
               <span className={`text-sm font-semibold ${o.kind === 'inaccessible' ? 'text-ramp' : 'text-brand'}`}>{o.label}</span>
               {o.name && <p className="text-[13px] text-ink">{o.name}</p>}
               <p className="mt-1 text-[11px] text-muted">Kaynak: OpenStreetMap</p>
+              <button
+                type="button"
+                onClick={() => onRouteTo([o.lat, o.lng], o.name || o.label)}
+                className="mt-2 flex w-full items-center justify-center gap-1 rounded-md border border-border px-2 py-2 text-[11px] font-semibold text-ink hover:bg-surface-2"
+              >
+                <Navigation size={12} aria-hidden="true" /> Buraya rota
+              </button>
             </div>
           </Popup>
         </Marker>
@@ -114,6 +134,13 @@ export default function MapView({
                   {metroDate(o.date)}
                   {days > 0 ? ` · ${days} gündür` : ''} · Kaynak: Metro İstanbul (resmî)
                 </p>
+                <button
+                  type="button"
+                  onClick={() => onRouteTo([o.lat, o.lng], o.stationName)}
+                  className="mt-2 flex w-full items-center justify-center gap-1 rounded-md border border-border px-2 py-2 text-[11px] font-semibold text-ink hover:bg-surface-2"
+                >
+                  <Navigation size={12} aria-hidden="true" /> Buraya rota
+                </button>
               </div>
             </Popup>
           </Marker>
@@ -185,6 +212,13 @@ export default function MapView({
                     </button>
                   )}
                 </div>
+                <button
+                  type="button"
+                  onClick={() => onRouteTo([pin.lat, pin.lng], getType(pin.type).label)}
+                  className="mt-1.5 flex w-full items-center justify-center gap-1 rounded-md border border-border px-2 py-2 text-[11px] font-semibold text-ink hover:bg-surface-2"
+                >
+                  <Navigation size={12} aria-hidden="true" /> Buraya rota
+                </button>
               </div>
             </Popup>
           </Marker>

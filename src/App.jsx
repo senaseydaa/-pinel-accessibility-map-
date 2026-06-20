@@ -11,6 +11,7 @@ import { distanceMeters } from './lib/geo.js';
 import { REFUTE_THRESHOLD, MERGE_RADIUS_M } from './lib/status.js';
 import { fetchMetro } from './lib/metro.js';
 import { fetchOsmInfra } from './lib/osm.js';
+import { fetchRoute } from './lib/route.js';
 
 const MEYDAN = [41.0268, 29.0152];
 // Bildirim ömrü kategoriye göre (dk) — kalıcı engeller (rampa/asansör) daha uzun
@@ -81,6 +82,11 @@ export default function App() {
   const [infra, setInfra] = useState(null);
   const [infraStatus, setInfraStatus] = useState('idle');
   const [showInfra, setShowInfra] = useState(false);
+  const [routeStart, setRouteStart] = useState({ coords: MEYDAN, label: 'Üsküdar Meydanı' });
+  const [routeEnd, setRouteEnd] = useState(null);
+  const [route, setRoute] = useState(null);
+  const [routeStatus, setRouteStatus] = useState('idle');
+  const [pickingFor, setPickingFor] = useState(null);
 
   const { coords: userCoords, locate, status: geoStatus } = useGeolocation();
 
@@ -119,7 +125,6 @@ export default function App() {
   // Resmî Metro İstanbul verisini açılışta çek
   useEffect(() => {
     loadOfficial();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function loadOfficial() {
@@ -209,7 +214,55 @@ export default function App() {
   }
 
   function handlePlace(latlng) {
+    if (pickingFor) {
+      const coords = [latlng.lat, latlng.lng];
+      if (pickingFor === 'start') setRouteStart({ coords, label: 'Seçilen nokta' });
+      else setRouteEnd({ coords, label: 'Seçilen nokta' });
+      setPickingFor(null);
+      return;
+    }
     openReport({ lat: latlng.lat, lng: latlng.lng });
+  }
+
+  // --- Rota (engel-farkında erişilebilir) ---
+  function buildAvoid() {
+    const a = pins.map((p) => [p.lng, p.lat]);
+    if (infra?.items) a.push(...infra.items.filter((i) => i.kind === 'inaccessible').map((i) => [i.lng, i.lat]));
+    return a;
+  }
+
+  function computeRoute(s, e) {
+    if (!s || !e) return;
+    setActiveView('route');
+    setPanelCollapsed(false);
+    setRouteStatus('loading');
+    fetchRoute({ start: [s.coords[1], s.coords[0]], end: [e.coords[1], e.coords[0]], avoid: buildAvoid() })
+      .then((r) => {
+        setRoute(r);
+        setRouteStatus('success');
+        if (mapRef.current && r.coords?.length) mapRef.current.fitBounds(r.coords, { padding: [56, 56] });
+        setSheetExpanded(false);
+      })
+      .catch((err) => {
+        setRouteStatus('error');
+        showToast(err.message, 'error');
+      });
+  }
+
+  function routeUseLocation() {
+    locate()
+      .then((coords) => setRouteStart({ coords, label: 'Konumunuz' }))
+      .catch((err) => showToast(err.message, 'error'));
+  }
+  function routePick(which) {
+    setPickingFor(which);
+    setSheetExpanded(false);
+    showToast('Haritada bir noktaya dokunun.', 'info');
+  }
+  function routeTo(coords, label) {
+    const e = { coords, label };
+    setRouteEnd(e);
+    computeRoute(routeStart, e);
   }
 
   function dropPinAtCenter() {
@@ -389,12 +442,12 @@ export default function App() {
       </a>
       <h1 className="sr-only">PINel — Üsküdar Meydanı erişilebilirlik haritası</h1>
 
-      <main className={`absolute inset-0 lg:relative lg:flex-1 ${reportMode ? 'reporting cursor-crosshair' : ''}`}>
+      <main className={`absolute inset-0 lg:relative lg:flex-1 ${reportMode || pickingFor ? 'reporting cursor-crosshair' : ''}`}>
         <MapView
           center={MEYDAN}
           pins={pins}
           selectedId={selectedId}
-          reportMode={reportMode}
+          reportMode={reportMode || !!pickingFor}
           flyTarget={flyTarget}
           userCoords={userCoords}
           now={now}
@@ -402,6 +455,9 @@ export default function App() {
           voterId={voterId}
           officialItems={official?.items || []}
           infraItems={showInfra ? infra?.items || [] : []}
+          route={route}
+          routeStart={routeStart?.coords}
+          routeEnd={routeEnd?.coords}
           onMapReady={(m) => {
             mapRef.current = m;
           }}
@@ -410,6 +466,7 @@ export default function App() {
           onConfirm={(id) => castVote(id, 'confirm')}
           onRefute={(id) => castVote(id, 'refute')}
           onDelete={deletePin}
+          onRouteTo={routeTo}
         />
 
         {reportMode ? (
@@ -492,6 +549,22 @@ export default function App() {
           onToggleInfra={toggleInfra}
           infraFrom={userCoords || MEYDAN}
           onFocusInfra={focusInfra}
+          routeStart={routeStart}
+          routeEnd={routeEnd}
+          route={route}
+          routeStatus={routeStatus}
+          pickingFor={pickingFor}
+          onRouteUseLocation={routeUseLocation}
+          onRouteUseMeydan={() => setRouteStart({ coords: MEYDAN, label: 'Üsküdar Meydanı' })}
+          onRoutePickStart={() => routePick('start')}
+          onRoutePickDest={() => routePick('dest')}
+          onRouteSetPreset={(p) => setRouteEnd({ coords: p.coords, label: p.name })}
+          onRouteCompute={() => computeRoute(routeStart, routeEnd)}
+          onRouteClear={() => {
+            setRoute(null);
+            setRouteEnd(null);
+            setRouteStatus('idle');
+          }}
           reportMode={reportMode}
           onToggleReport={toggleReport}
           query={query}

@@ -1,11 +1,13 @@
-import { Accessibility, Plus, List, ShieldCheck, MapPin, User, Sun, Moon } from 'lucide-react';
+import { Accessibility, Plus, List, Navigation, ShieldCheck, MapPin, User, Sun, Moon } from 'lucide-react';
 import ReportsView from './views/ReportsView.jsx';
+import RouteView from './views/RouteView.jsx';
 import OfficialView from './views/OfficialView.jsx';
 import InfraView from './views/InfraView.jsx';
 import ProfileView from './views/ProfileView.jsx';
 
 const VIEWS = [
   { key: 'reports', label: 'Bildirimler', Icon: List },
+  { key: 'route', label: 'Rota', Icon: Navigation },
   { key: 'official', label: 'Resmî durum', Icon: ShieldCheck },
   { key: 'altyapi', label: 'Altyapı', Icon: MapPin },
   { key: 'profile', label: 'Profil', Icon: User },
@@ -62,6 +64,22 @@ export default function Sidebar({
   const view = (
     <>
       {activeView === 'reports' && <ReportsView {...rest} />}
+      {activeView === 'route' && (
+        <RouteView
+          start={rest.routeStart}
+          end={rest.routeEnd}
+          route={rest.route}
+          routeStatus={rest.routeStatus}
+          pickingFor={rest.pickingFor}
+          onUseLocation={rest.onRouteUseLocation}
+          onUseMeydan={rest.onRouteUseMeydan}
+          onPickStart={rest.onRoutePickStart}
+          onPickDest={rest.onRoutePickDest}
+          onSetPreset={rest.onRouteSetPreset}
+          onCompute={rest.onRouteCompute}
+          onClear={rest.onRouteClear}
+        />
+      )}
       {activeView === 'official' && (
         <OfficialView
           official={rest.official}

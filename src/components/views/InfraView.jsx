@@ -19,7 +19,7 @@ const fmtDist = (m) => (m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(
 // metin alternatifi.
 export default function InfraView({ infra, infraStatus, onRefresh, showInfra, onToggleShow, from, onFocus }) {
   const [filter, setFilter] = useState('all');
-  const items = infra?.items || [];
+  const items = useMemo(() => infra?.items || [], [infra]);
 
   const sorted = useMemo(
     () =>

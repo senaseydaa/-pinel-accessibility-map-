@@ -14,3 +14,8 @@
   from = "/api/osm"
   to = "/.netlify/functions/osm"
   status = 200
+
+[[redirects]]
+  from = "/api/route"
+  to = "/.netlify/functions/route"
+  status = 200
