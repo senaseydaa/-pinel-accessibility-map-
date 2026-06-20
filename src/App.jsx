@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { LocateFixed, Crosshair, Accessibility } from 'lucide-react';
+import { LocateFixed, Crosshair, Accessibility, Ship } from 'lucide-react';
 import MapView from './components/MapView.jsx';
 import Sidebar from './components/Sidebar.jsx';
 import ReportModal from './components/ReportModal.jsx';
@@ -13,6 +13,7 @@ import { fetchMetro } from './lib/metro.js';
 import { fetchOsmInfra } from './lib/osm.js';
 import { fetchRoute } from './lib/route.js';
 import anadoluBoundary from './data/anadolu-boundary.json';
+import transitHubs from './data/transit-hubs.json';
 
 const MEYDAN = [41.0268, 29.0152];
 // Bildirim ömrü kategoriye göre (dk) — kalıcı engeller (rampa/asansör) daha uzun
@@ -83,6 +84,7 @@ export default function App() {
   const [infra, setInfra] = useState(null);
   const [infraStatus, setInfraStatus] = useState('idle');
   const [showInfra, setShowInfra] = useState(false);
+  const [showFerry, setShowFerry] = useState(false);
   const [routeStart, setRouteStart] = useState({ coords: MEYDAN, label: 'Üsküdar Meydanı' });
   const [routeEnd, setRouteEnd] = useState(null);
   const [route, setRoute] = useState(null);
@@ -496,6 +498,7 @@ export default function App() {
           voterId={voterId}
           officialItems={official?.items || []}
           infraItems={showInfra ? infra?.items || [] : []}
+          ferryItems={showFerry ? transitHubs : []}
           route={route}
           routeStart={routeStart?.coords}
           routeEnd={routeEnd?.coords}
@@ -560,6 +563,15 @@ export default function App() {
             aria-busy={infraStatus === 'loading'}
           >
             <Accessibility size={17} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowFerry((v) => !v)}
+            className={`icon-btn shadow-card ${showFerry ? 'border-brand text-brand' : ''}`}
+            aria-label="İskele erişilebilirlik katmanını göster/gizle"
+            aria-pressed={showFerry}
+          >
+            <Ship size={17} />
           </button>
         </div>
       </main>

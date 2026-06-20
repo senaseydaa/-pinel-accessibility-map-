@@ -90,6 +90,18 @@ export function makeInfraIcon(kind, label) {
   });
 }
 
+// İskele (ferry) işareti — elmas biçim (damla/kare/daireden ayrı). Renk = step-free.
+export function makeFerryIcon(accessible, label) {
+  const color = accessible === 'yes' ? '#0F766E' : accessible === 'no' ? '#DC2626' : '#94A3B8';
+  return L.divIcon({
+    className: 'pinel-marker',
+    html: `<div role="img" aria-label="${esc(label || 'İskele')}" style="width:15px;height:15px;background:${color};border:2px solid #fff;border-radius:3px;transform:rotate(45deg);box-shadow:0 1px 2px rgba(20,24,28,0.4);"></div>`,
+    iconSize: [15, 15],
+    iconAnchor: [8, 8],
+    popupAnchor: [0, -9],
+  });
+}
+
 // Rota başlangıç/hedef işareti.
 export function makeRoutePoint(kind) {
   const color = kind === 'start' ? '#0F766E' : '#EA580C';

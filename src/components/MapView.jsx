@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Polygon, useMap, useMapEvents } from 'react-leaflet';
 import { Check, X, Trash2, ArrowUpDown, Navigation } from 'lucide-react';
-import { makeMarkerIcon, makeUserIcon, makeOfficialIcon, makeInfraIcon, makeRoutePoint } from '../lib/mapIcons.js';
+import { makeMarkerIcon, makeUserIcon, makeOfficialIcon, makeInfraIcon, makeFerryIcon, makeRoutePoint } from '../lib/mapIcons.js';
 import CategoryBadge from './CategoryBadge.jsx';
 import { getType } from '../data/obstacleTypes.js';
 import { getStatus } from '../lib/status.js';
@@ -67,6 +67,7 @@ export default function MapView({
   voterId,
   officialItems = [],
   infraItems = [],
+  ferryItems = [],
   route,
   routeStart,
   routeEnd,
@@ -132,6 +133,29 @@ export default function MapView({
           </Popup>
         </Marker>
       ))}
+
+      {ferryItems.map((f) => {
+        const txt = f.accessible === 'yes' ? 'Erişilebilir ✓' : f.accessible === 'no' ? 'Erişilemez' : 'Erişim bilgisi yok';
+        const cls = f.accessible === 'yes' ? 'text-brand' : f.accessible === 'no' ? 'text-ramp' : 'text-muted';
+        return (
+          <Marker key={f.id} position={[f.lat, f.lng]} icon={makeFerryIcon(f.accessible, `${f.name} iskelesi`)} keyboard={false}>
+            <Popup>
+              <div className="min-w-[11rem]">
+                <span className="text-sm font-semibold text-ink">{f.name}</span>
+                <p className={`mt-1 text-[12px] font-semibold ${cls}`}>{txt}</p>
+                <p className="mt-1 text-[11px] text-muted">İskele · Kaynak: İBB GTFS</p>
+                <button
+                  type="button"
+                  onClick={() => onRouteTo([f.lat, f.lng], f.name)}
+                  className="mt-2 flex w-full items-center justify-center gap-1 rounded-md border border-border px-2 py-2 text-[11px] font-semibold text-ink hover:bg-surface-2"
+                >
+                  <Navigation size={12} aria-hidden="true" /> Buraya rota
+                </button>
+              </div>
+            </Popup>
+          </Marker>
+        );
+      })}
 
       {userCoords && (
         <Marker position={userCoords} icon={makeUserIcon()} keyboard={false}>

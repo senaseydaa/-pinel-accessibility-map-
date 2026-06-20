@@ -47,6 +47,10 @@ export default function ProfileView({ theme, onToggleTheme, points }) {
             <span>Erişime kapalı yer <span className="text-muted">(OSM)</span></span>
           </div>
           <div className="flex items-center gap-2">
+            <span className="inline-block h-3 w-3 rotate-45 rounded-[2px] border-2 border-white" style={{ backgroundColor: '#0F766E' }} />
+            <span>İskele step-free <span className="text-muted">(İBB GTFS · yeşil=erişilebilir, gri=bilinmiyor)</span></span>
+          </div>
+          <div className="flex items-center gap-2">
             <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-brand" />
             <span>Konumunuz</span>
           </div>
