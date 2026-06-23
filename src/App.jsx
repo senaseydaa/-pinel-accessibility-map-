@@ -1,769 +1,665 @@
-import { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import { 
-  MapPin, 
-  AlertTriangle, 
-  X, 
-  Trash2, 
-  Navigation, 
-  Sun, 
-  Moon, 
-  CheckCircle,
-  Accessibility,
-  Info,
-  Clock,
-  ArrowUpDown,
-  Wrench
-} from 'lucide-react';
-import './App.css';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { LocateFixed, Crosshair, Accessibility, Ship } from 'lucide-react';
+import MapView from './components/MapView.jsx';
+import Sidebar from './components/Sidebar.jsx';
+import ReportModal from './components/ReportModal.jsx';
+import Toast from './components/Toast.jsx';
+import { useLocalStorage } from './hooks/useLocalStorage.js';
+import { useGeolocation } from './hooks/useGeolocation.js';
+import { getType } from './data/obstacleTypes.js';
+import { distanceMeters, pointInRings } from './lib/geo.js';
+import { REFUTE_THRESHOLD, MERGE_RADIUS_M } from './lib/status.js';
+import { fetchMetro } from './lib/metro.js';
+import { fetchOsmInfra } from './lib/osm.js';
+import { fetchRoute } from './lib/route.js';
+import anadoluBoundary from './data/anadolu-boundary.json';
+import transitHubs from './data/transit-hubs.json';
 
-// 4 Custom Obstacle Types mapping with styling metadata (Emojis completely replaced with Lucide/SVG components)
-const OBSTACLE_TYPES = {
-  1: {
-    label: 'Önü Kapalı Rampa',
-    icon: <Accessibility size={16} style={{ display: 'inline-block', verticalAlign: 'middle' }} />,
-    color: '#EA580C',
-    desc: 'Kaldırım rampasının önüne araç park edilmiş veya eşya konulmuş.',
-  },
-  2: {
-    label: 'Dik Rampa',
-    icon: <Accessibility size={16} style={{ display: 'inline-block', verticalAlign: 'middle' }} />,
-    color: '#EA580C',
-    desc: 'Tekerlekli sandalye kullanımına uygun olmayan aşırı dik eğimli rampa.',
-  },
-  3: {
-    label: 'Bozuk Asansör',
-    icon: <ArrowUpDown size={16} style={{ display: 'inline-block', verticalAlign: 'middle' }} />,
-    color: '#3B82F6',
-    desc: 'Üst geçit, metro veya binalardaki engelli asansörünün çalışmaması.',
-  },
-  4: {
-    label: 'Sokak Çalışması',
-    icon: <Wrench size={16} style={{ display: 'inline-block', verticalAlign: 'middle' }} />,
-    color: '#10B981',
-    desc: 'Yol yapımı, kaldırım yenileme veya kazı çalışmaları sebebiyle geçişin kapanması.',
-  }
-};
+const MEYDAN = [41.0268, 29.0152];
+// Bildirim ömrü kategoriye göre (dk) — kalıcı engeller (rampa/asansör) daha uzun
+// yaşar; sokak çalışması daha çabuk değişir. "Hâlâ duruyor" oyu süreyi yeniler.
+const LIFETIME = { rampa: 480, asansor: 480, calisma: 240 };
+const lifetimeMin = (type) => LIFETIME[type] ?? 240;
 
-// Üsküdar Meydanı pilot region coordinates (locked between Marmaray exit & ferry docks)
-const MEYDAN_COORDS = [41.0268, 29.0152];
-
-// Custom category-specific markers using DivIcon with clean vector SVG geometries (No emojis in text tags)
-const getCategoryIcon = (type) => {
-  if (type === 'Bozuk Asansör') {
-    return L.divIcon({
-      className: 'custom-elevator-marker',
-      html: `
-        <div class="marker-container">
-          <div class="marker-pulse blue-pulse"></div>
-          <div class="marker-pin">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2Z" fill="#3B82F6"/>
-              <circle cx="12" cy="9" r="4.5" fill="white"/>
-              <rect x="10.2" y="7.2" width="3.6" height="3.6" rx="0.5" fill="none" stroke="#3B82F6" stroke-width="0.8"/>
-              <line x1="12" y1="7.2" x2="12" y2="10.8" stroke="#3B82F6" stroke-width="0.6"/>
-            </svg>
-          </div>
-        </div>
-      `,
-      iconSize: [32, 32],
-      iconAnchor: [16, 32],
-      popupAnchor: [0, -32]
-    });
-  } else if (type === 'Önü Kapalı Rampa' || type === 'Dik Rampa') {
-    return L.divIcon({
-      className: 'custom-ramp-marker',
-      html: `
-        <div class="marker-container">
-          <div class="marker-pulse orange-red-pulse"></div>
-          <div class="marker-pin">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2Z" fill="#EA580C"/>
-              <circle cx="12" cy="9" r="4.5" fill="white"/>
-              <circle cx="12" cy="7.2" r="0.6" fill="#EA580C"/>
-              <path d="M12.5 8H11.7l-.4 1.2M11.7 8.7C12.1 8.7 12.5 9.1 12.5 9.5C12.5 9.9 12.1 10.3 11.7 10.3" stroke="#EA580C" stroke-width="0.7" stroke-linecap="round" fill="none"/>
-            </svg>
-          </div>
-        </div>
-      `,
-      iconSize: [32, 32],
-      iconAnchor: [16, 32],
-      popupAnchor: [0, -32]
-    });
-  } else {
-    // Sokak Çalışması (Striped hazard pattern)
-    return L.divIcon({
-      className: 'custom-work-marker',
-      html: `
-        <div class="marker-container">
-          <div class="marker-pulse work-pulse"></div>
-          <div class="marker-pin">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <pattern id="stripes-pattern" width="6" height="6" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
-                  <line x1="0" y1="0" x2="0" y2="6" stroke="#10B981" stroke-width="3" />
-                  <line x1="3" y1="0" x2="3" y2="6" stroke="#F59E0B" stroke-width="3" />
-                </pattern>
-              </defs>
-              <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2Z" fill="url(#stripes-pattern)"/>
-              <circle cx="12" cy="9" r="4.5" fill="white" stroke="#1F2937" stroke-width="0.5"/>
-              <path d="M12 6.8L13.8 10.2H10.2L12 6.8Z" fill="#1F2937"/>
-            </svg>
-          </div>
-        </div>
-      `,
-      iconSize: [32, 32],
-      iconAnchor: [16, 32],
-      popupAnchor: [0, -32]
-    });
-  }
-};
-
-// A component that handles map clicks and triggers the reporting modal
-function MapClickHandler({ active, onMapClick, onInactiveClick }) {
-  useMapEvents({
-    click(e) {
-      if (active) {
-        onMapClick(e.latlng);
-      } else {
-        onInactiveClick();
-      }
-    },
+// Üsküdar Meydanı çevresinden gerçekçi örnek bildirimler (yalnızca depo boşsa).
+// authorId 'seed' — yani benim bildirimim değil; bu yüzden silemem, yalnızca oylayabilirim.
+function seedPins() {
+  const now = Date.now();
+  const make = (agoMin, p) => ({
+    refutes: 0,
+    photo: null,
+    authorId: 'seed',
+    ...p,
+    createdAt: new Date(now - agoMin * 60000).toISOString(),
+    expiresAt: new Date(now - agoMin * 60000 + lifetimeMin(p.type) * 60000).toISOString(),
   });
-  return null;
+  return [
+    make(95, {
+      id: 'seed-asansor',
+      type: 'asansor',
+      lat: 41.0264,
+      lng: 29.0148,
+      confirms: 3,
+      notes: 'Marmaray ana çıkışındaki engelli asansörü arıza nedeniyle servis dışı.',
+    }),
+    make(200, {
+      id: 'seed-rampa',
+      type: 'rampa',
+      lat: 41.0272,
+      lng: 29.0156,
+      confirms: 1,
+      notes: 'Vapur iskelesi karşısındaki kaldırım rampasının önüne motosikletler park edilmiş.',
+    }),
+    make(25, {
+      id: 'seed-calisma',
+      type: 'calisma',
+      lat: 41.0261,
+      lng: 29.0162,
+      confirms: 4,
+      notes: 'Mihrimah Sultan Camii arkasındaki sokak çalışması tekerlekli sandalye geçişini kapatıyor.',
+    }),
+  ];
 }
 
-// A helper component to handle programmatic map flying (centering and zooming)
-function MapController({ coords, zoom }) {
-  const map = useMap();
-  useEffect(() => {
-    if (coords) {
-      map.flyTo(coords, zoom, {
-        duration: 1.5,
-        easeLinearity: 0.25
-      });
-    }
-  }, [coords, zoom, map]);
-  return null;
-}
+export default function App() {
+  const [pins, setPins] = useLocalStorage('pinel.pins', seedPins);
+  const [theme, setTheme] = useLocalStorage('pinel.theme', 'light');
+  const [votes, setVotes] = useLocalStorage('pinel.votes', {});
+  const [points, setPoints] = useLocalStorage('pinel.points', 0);
+  const [voterId] = useLocalStorage('pinel.voterId', () => `v-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`);
 
-function App() {
-  // --- States ---
-  const [pins, setPins] = useState(() => {
-    const saved = localStorage.getItem('engelsiz_harita_pins');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error("Local storage pins parse error:", e);
-      }
-    }
-    // Default 3 simulated mock pins loaded precisely at Uskudar Square center landmarks
-    return [
-      {
-        id: 'marmaray-elevator',
-        lat: 41.0266,
-        lng: 29.0152,
-        type: 'Bozuk Asansör',
-        notes: 'Marmaray ana çıkışındaki engelli asansörü arıza nedeniyle geçici olarak servis dışı.',
-        date: new Date(Date.now() - 3600000 * 2).toISOString(),
-      },
-      {
-        id: 'docks-ramp',
-        lat: 41.0271,
-        lng: 29.0147,
-        type: 'Önü Kapalı Rampa',
-        notes: 'Vapur iskelesi karşısındaki kaldırım rampasının önüne yoğun kurye motoru park edilmiş.',
-        date: new Date(Date.now() - 3600000 * 5).toISOString(),
-      },
-      {
-        id: 'mosque-construction',
-        lat: 41.0259,
-        lng: 29.0162,
-        type: 'Sokak Çalışması',
-        notes: 'Sokak iyileştirme ve altyapı çalışması nedeniyle kaldırım geçişi tekerlekli sandalyeye kapalı.',
-        date: new Date(Date.now() - 3600000 * 24).toISOString(),
-      }
-    ];
-  });
-
-  const [isReportMode, setIsReportMode] = useState(false);
-  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
-  const [tempCoords, setTempCoords] = useState(null);
-  const [selectedPin, setSelectedPin] = useState(null);
-  const [filterType, setFilterType] = useState('All');
-  
-  // Form states
-  const [selectedObstacleType, setSelectedObstacleType] = useState(1);
-  const [notes, setNotes] = useState('');
-  
-  // Map Controller focus state (hardlocked on Uskudar Square coordinates)
-  const [mapFocus, setMapFocus] = useState({ coords: MEYDAN_COORDS, zoom: 18, trigger: 0 });
-  
-  // Toast notifications
+  const [filter, setFilter] = useState('all');
+  const [query, setQuery] = useState('');
+  const [selectedId, setSelectedId] = useState(null);
+  const [reportMode, setReportMode] = useState(false);
+  const [modalCoords, setModalCoords] = useState(null);
+  const [flyTarget, setFlyTarget] = useState(null);
   const [toasts, setToasts] = useState([]);
+  const [now, setNow] = useState(() => Date.now());
+  const [sheetExpanded, setSheetExpanded] = useState(false);
+  const [official, setOfficial] = useState(null);
+  const [officialStatus, setOfficialStatus] = useState('idle');
+  const [activeView, setActiveView] = useState('reports');
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const [infra, setInfra] = useState(null);
+  const [infraStatus, setInfraStatus] = useState('idle');
+  const [showInfra, setShowInfra] = useState(false);
+  const [showFerry, setShowFerry] = useState(false);
+  const [routeStart, setRouteStart] = useState({ coords: MEYDAN, label: 'Üsküdar Meydanı' });
+  const [routeEnd, setRouteEnd] = useState(null);
+  const [route, setRoute] = useState(null);
+  const [routeStatus, setRouteStatus] = useState('idle');
+  const [pickingFor, setPickingFor] = useState(null);
+  const [boundary] = useState(anadoluBoundary); // statik Anadolu yakası sınırı
 
-  // Save pins to localStorage
-  useEffect(() => {
-    localStorage.setItem('engelsiz_harita_pins', JSON.stringify(pins));
-  }, [pins]);
+  const { coords: userCoords, locate, status: geoStatus } = useGeolocation();
 
-  // Apply dark mode theme
+  const mapRef = useRef(null);
+  const flyNonce = useRef(0);
+  const toastId = useRef(0);
+  const lastTrigger = useRef(null);
+  const showInfraRef = useRef(false);
+  const infraTimer = useRef(null);
+  const infraReqId = useRef(0);
+
   useEffect(() => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-    localStorage.setItem('theme', theme);
+    document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
-  // --- Actions ---
-  const toggleTheme = () => {
-    setTheme(prev => prev === 'light' ? 'dark' : 'light');
-  };
-
-  const showToast = (message, type = 'success') => {
-    const id = Date.now();
-    setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 4000);
-  };
-
-  const handleMapClick = (latlng) => {
-    setTempCoords({ lat: latlng.lat, lng: latlng.lng });
-    // Reset form values
-    setSelectedObstacleType(1);
-    setNotes('');
-  };
-
-  const handleInactiveClick = () => {
-    showToast('Engel bildirmek için lütfen yukarıdan "Engel Bildir" modunu aktif edin.', 'error');
-  };
-
-  const handleSaveObstacle = () => {
-    if (!tempCoords) return;
-
-    const newPin = {
-      id: `pin-${Date.now()}`,
-      lat: tempCoords.lat,
-      lng: tempCoords.lng,
-      type: OBSTACLE_TYPES[selectedObstacleType].label,
-      notes: notes.trim(),
-      date: new Date().toISOString()
+  // Gerçek zamanlı saat + süresi dolanları temizle (30 sn'de bir)
+  useEffect(() => {
+    const tick = () => {
+      const t = Date.now();
+      setNow(t);
+      setPins((prev) => {
+        const live = prev.filter((p) => new Date(p.expiresAt).getTime() > t);
+        return live.length === prev.length ? prev : live;
+      });
     };
+    const id = setInterval(tick, 30000);
+    return () => clearInterval(id);
+  }, [setPins]);
 
-    setPins(prev => [newPin, ...prev]);
-    setTempCoords(null);
-    setIsReportMode(false); // Auto toggle off after reporting
-    showToast('Engel haritaya başarıyla kaydedildi!');
-  };
+  // Paylaşılan bağlantıyı aç (?pin=...)
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('pin');
+    if (!id) return;
+    const pin = pins.find((p) => p.id === id);
+    if (pin) focusPin(pin);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const handleDeletePin = (id) => {
-    setPins(prev => prev.filter(pin => pin.id !== id));
-    showToast('Bildirim başarıyla silindi.');
-  };
+  // Resmî Metro İstanbul verisini açılışta çek
+  useEffect(() => {
+    loadOfficial();
+  }, []);
 
-  const handleFocusMeydan = () => {
-    setMapFocus({
-      coords: MEYDAN_COORDS,
-      zoom: 18,
-      trigger: Math.random() // Force trigger update
+
+  function loadOfficial() {
+    setOfficialStatus('loading');
+    fetchMetro()
+      .then((data) => {
+        setOfficial(data);
+        setOfficialStatus('success');
+      })
+      .catch(() => setOfficialStatus('error'));
+  }
+
+  function fitAnadolu() {
+    if (mapRef.current && boundary?.bbox) {
+      mapRef.current.fitBounds(
+        [
+          [boundary.bbox[0], boundary.bbox[2]],
+          [boundary.bbox[1], boundary.bbox[3]],
+        ],
+        { padding: [12, 12] }
+      );
+    }
+  }
+
+  function fitOfficial() {
+    const items = official?.items || [];
+    if (!items.length || !mapRef.current) return;
+    mapRef.current.fitBounds(
+      items.map((i) => [i.lat, i.lng]),
+      { padding: [48, 48], maxZoom: 15 }
+    );
+    setSheetExpanded(false);
+  }
+
+  // Mevcut harita görünümü → merkez + yarıçap (yakınlaştıkça küçük, uzaklaştıkça büyük)
+  function currentView() {
+    const m = mapRef.current;
+    if (!m) return { lat: MEYDAN[0], lng: MEYDAN[1], radius: 1500 };
+    const c = m.getCenter();
+    const ne = m.getBounds().getNorthEast();
+    return { lat: c.lat, lng: c.lng, radius: Math.max(600, Math.min(4000, Math.round(c.distanceTo(ne)))) };
+  }
+
+  function loadInfra() {
+    const v = currentView();
+    const id = ++infraReqId.current; // yalnızca en son istek uygulanır
+    setInfraStatus('loading');
+    fetchOsmInfra(v.lat.toFixed(5), v.lng.toFixed(5), v.radius)
+      .then((data) => {
+        if (id !== infraReqId.current) return; // eski yanıt — yok say
+        // Anadolu yakası dışındaki noktaları gizle
+        const inside = boundary?.rings
+          ? data.items.filter((i) => pointInRings([i.lat, i.lng], boundary.rings))
+          : data.items;
+        const byKind = {};
+        inside.forEach((i) => (byKind[i.kind] = (byKind[i.kind] || 0) + 1));
+        setInfra({ ...data, items: inside, byKind, count: inside.length });
+        setInfraStatus('success');
+      })
+      .catch(() => {
+        if (id !== infraReqId.current) return; // eski hata — toast yok
+        setInfraStatus('error');
+        showToast('Erişilebilir altyapı şu an yüklenemedi.', 'error');
+      });
+  }
+
+  // Tek-istek: toggle + fly + moveend çağrılarını tek yüklemede topla (debounce)
+  function requestInfra() {
+    clearTimeout(infraTimer.current);
+    infraTimer.current = setTimeout(loadInfra, 500);
+  }
+
+  function toggleInfra() {
+    const next = !showInfra;
+    setShowInfra(next);
+    showInfraRef.current = next;
+    if (next) {
+      // Konuma yaklaş — yakındaki erişilebilir altyapıyı net göster (uzaklaşma yok)
+      const m = mapRef.current;
+      if (m) {
+        const target = userCoords || [m.getCenter().lat, m.getCenter().lng];
+        fly(target, Math.max(m.getZoom(), 16));
+      }
+      requestInfra();
+    }
+  }
+
+  function focusInfra(coords) {
+    setShowInfra(true);
+    showInfraRef.current = true;
+    fly(coords, 17);
+    setSheetExpanded(false); // fly → moveend → otomatik yeniden yükler
+  }
+
+  // Harita gezilince (katman açıksa) yakındaki altyapıyı yeniden yükle (debounce'lu)
+  function handleMapMove() {
+    if (showInfraRef.current) requestInfra();
+  }
+
+  function showToast(message, type = 'success') {
+    const id = ++toastId.current;
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4500);
+  }
+
+  function fly(coords, zoom) {
+    flyNonce.current += 1;
+    setFlyTarget({ coords, zoom, nonce: flyNonce.current });
+  }
+
+  function focusPin(pin) {
+    setSelectedId(pin.id);
+    fly([pin.lat, pin.lng], 18);
+    setSheetExpanded(false);
+  }
+
+  function selectView(key) {
+    if (key === activeView) {
+      // aynı ikona tekrar tıklama → paneli aç/kapat
+      setPanelCollapsed((c) => !c);
+      setSheetExpanded((e) => !e);
+    } else {
+      setActiveView(key);
+      setPanelCollapsed(false);
+      setSheetExpanded(true);
+      if (key === 'altyapi') loadInfra();
+    }
+  }
+
+  function openReport(coords) {
+    lastTrigger.current = document.activeElement;
+    setModalCoords(coords);
+  }
+
+  function closeReport() {
+    setModalCoords(null);
+    if (lastTrigger.current && lastTrigger.current.focus) lastTrigger.current.focus();
+  }
+
+  function handlePlace(latlng) {
+    if (pickingFor) {
+      const coords = [latlng.lat, latlng.lng];
+      if (pickingFor === 'start') setRouteStart({ coords, label: 'Seçilen nokta' });
+      else setRouteEnd({ coords, label: 'Seçilen nokta' });
+      setPickingFor(null);
+      return;
+    }
+    openReport({ lat: latlng.lat, lng: latlng.lng });
+  }
+
+  // --- Rota (engel-farkında erişilebilir) ---
+  function buildAvoid() {
+    const a = pins.map((p) => [p.lng, p.lat]);
+    if (infra?.items) a.push(...infra.items.filter((i) => i.kind === 'inaccessible').map((i) => [i.lng, i.lat]));
+    return a;
+  }
+
+  function computeRoute(s, e) {
+    if (!s || !e) return;
+    setActiveView('route');
+    setPanelCollapsed(false);
+    setRouteStatus('loading');
+    fetchRoute({ start: [s.coords[1], s.coords[0]], end: [e.coords[1], e.coords[0]], avoid: buildAvoid() })
+      .then((r) => {
+        setRoute(r);
+        setRouteStatus('success');
+        if (mapRef.current && r.coords?.length) mapRef.current.fitBounds(r.coords, { padding: [56, 56] });
+        setSheetExpanded(false);
+      })
+      .catch((err) => {
+        setRouteStatus('error');
+        showToast(err.message, 'error');
+      });
+  }
+
+  function routeUseLocation() {
+    locate()
+      .then((coords) => setRouteStart({ coords, label: 'Konumunuz' }))
+      .catch((err) => showToast(err.message, 'error'));
+  }
+  function routePick(which) {
+    setPickingFor(which);
+    setSheetExpanded(false);
+    showToast('Haritada bir noktaya dokunun.', 'info');
+  }
+  function routeTo(coords, label) {
+    const e = { coords, label };
+    setRouteEnd(e);
+    computeRoute(routeStart, e);
+  }
+
+  function dropPinAtCenter() {
+    const c = mapRef.current?.getCenter();
+    if (c) openReport({ lat: c.lat, lng: c.lng });
+  }
+
+  function freshExpiry(type) {
+    return new Date(Date.now() + lifetimeMin(type) * 60000).toISOString();
+  }
+
+  function saveObstacle(type, notes, photo) {
+    if (!modalCoords) return;
+    const coords = [modalCoords.lat, modalCoords.lng];
+
+    // Mükerrer birleştirme: yakında (MERGE_RADIUS_M) aynı kategori varsa yeni pin
+    // açma — mevcut bildirimi doğrula (+1 onay).
+    const dup = pins.find(
+      (p) => p.type === type && distanceMeters([p.lat, p.lng], coords) <= MERGE_RADIUS_M
+    );
+    if (dup) {
+      setPins((prev) =>
+        prev.map((p) => (p.id === dup.id ? { ...p, confirms: (p.confirms || 0) + 1, expiresAt: freshExpiry(dup.type) } : p))
+      );
+      setVotes((v) => ({ ...v, [dup.id]: 'confirm' }));
+      setModalCoords(null);
+      setReportMode(false);
+      focusPin(dup);
+      setPoints((p) => p + 1);
+      showToast('Yakında aynı bildirim vardı — onu doğruladınız. (+1 onay)');
+      return;
+    }
+
+    const created = Date.now();
+    const pin = {
+      id: `pin-${created}`,
+      type,
+      lat: modalCoords.lat,
+      lng: modalCoords.lng,
+      notes: notes || 'Açıklama eklenmedi.',
+      photo: photo || null,
+      authorId: voterId,
+      confirms: 1, // sahibinin kendi onayı
+      refutes: 0,
+      createdAt: new Date(created).toISOString(),
+      expiresAt: new Date(created + lifetimeMin(type) * 60000).toISOString(),
+    };
+    setPins((prev) => [pin, ...prev]);
+    setVotes((v) => ({ ...v, [pin.id]: 'confirm' }));
+    setModalCoords(null);
+    setReportMode(false);
+    focusPin(pin);
+    setPoints((p) => p + 5);
+    showToast(`${getType(type).label} eklendi. (+5 puan)`);
+  }
+
+  // Bağımsız topluluk oyu (admin yok). Aynı oy tekrarlanamaz; oy değiştirilebilir.
+  function castVote(pinId, kind) {
+    const prev = votes[pinId];
+    if (prev === kind) {
+      showToast('Bu bildirimi zaten oyladınız.', 'info');
+      return;
+    }
+    const pin = pins.find((p) => p.id === pinId);
+    if (!pin) return;
+
+    let confirms = pin.confirms || 0;
+    let refutes = pin.refutes || 0;
+    if (prev === 'confirm') confirms = Math.max(0, confirms - 1);
+    if (prev === 'refute') refutes = Math.max(0, refutes - 1);
+    if (kind === 'confirm') confirms += 1;
+    else refutes += 1;
+
+    const willRemove = kind === 'refute' && refutes >= REFUTE_THRESHOLD;
+
+    if (willRemove) {
+      setPins((prevPins) => prevPins.filter((p) => p.id !== pinId));
+      if (selectedId === pinId) setSelectedId(null);
+    } else {
+      setPins((prevPins) =>
+        prevPins.map((p) =>
+          p.id === pinId
+            ? { ...p, confirms, refutes, ...(kind === 'confirm' ? { expiresAt: freshExpiry(pin.type) } : {}) }
+            : p
+        )
+      );
+    }
+    setVotes((v) => ({ ...v, [pinId]: kind }));
+    const earned = !prev ? ' (+1 puan)' : '';
+    if (!prev) setPoints((p) => p + 1);
+
+    if (willRemove) showToast(`Yeterli "kalktı" oyu — bildirim topluluk tarafından kaldırıldı.${earned}`);
+    else if (kind === 'confirm') showToast(`Doğruladınız, süre yenilendi.${earned}`);
+    else showToast(`"Kalktı" oyunuz alındı.${earned}`);
+  }
+
+  function deletePin(id) {
+    const pin = pins.find((p) => p.id === id);
+    if (!pin || pin.authorId !== voterId) return; // yalnızca kendi bildirimini silebilir
+    setPins((prev) => prev.filter((p) => p.id !== id));
+    if (selectedId === id) setSelectedId(null);
+    showToast('Bildiriminiz silindi.');
+  }
+
+  async function sharePin(pin) {
+    const url = `${window.location.origin}${window.location.pathname}?pin=${pin.id}`;
+    const text = `PINel — ${getType(pin.type).label} (Üsküdar)`;
+    try {
+      if (navigator.share) await navigator.share({ title: 'PINel', text, url });
+      else {
+        await navigator.clipboard.writeText(url);
+        showToast('Bağlantı panoya kopyalandı.');
+      }
+    } catch {
+      /* kullanıcı iptal etti */
+    }
+  }
+
+  function toggleReport() {
+    // Yan etkiyi updater dışında çalıştır — StrictMode updater'ı iki kez çağırınca
+    // çift toast çıkıyordu.
+    const next = !reportMode;
+    setReportMode(next);
+    if (next) {
+      setSheetExpanded(false);
+      showToast('Bildirim modu açık. Haritada bir noktaya dokunun ya da Sekme ile "Merkeze pin bırak" / "Konumumdan" düğmelerine gidin.', 'info');
+    }
+  }
+
+  function reportHere() {
+    locate()
+      .then((coords) => {
+        fly(coords, 18);
+        if (!reportMode) setReportMode(true);
+        openReport({ lat: coords[0], lng: coords[1] });
+      })
+      .catch((err) => showToast(err.message, 'error'));
+  }
+
+  function locateMe() {
+    locate()
+      .then((coords) => {
+        fly(coords, 18);
+        showToast('Konumunuza gidildi.');
+      })
+      .catch((err) => showToast(err.message, 'error'));
+  }
+
+  function toggleTheme() {
+    setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
+  }
+
+  const counts = useMemo(() => {
+    const c = { total: pins.length, rampa: 0, asansor: 0, calisma: 0, diger: 0 };
+    pins.forEach((p) => {
+      if (c[p.type] != null) c[p.type] += 1;
     });
-    showToast("Üsküdar Meydanı'na odaklanıldı.");
-  };
+    return c;
+  }, [pins]);
 
-  const handleFocusPin = (pin) => {
-    setMapFocus({
-      coords: [pin.lat, pin.lng],
-      zoom: 19,
-      trigger: Math.random()
+  const filteredPins = useMemo(() => {
+    const q = query.trim().toLocaleLowerCase('tr');
+    return pins.filter((p) => {
+      if (filter !== 'all' && p.type !== filter) return false;
+      if (!q) return true;
+      return `${p.notes} ${getType(p.type).label}`.toLocaleLowerCase('tr').includes(q);
     });
-    setSelectedPin(pin);
-  };
-
-  const getObstacleTypeKey = (label) => {
-    return Object.keys(OBSTACLE_TYPES).find(key => OBSTACLE_TYPES[key].label === label);
-  };
-
-  // --- Filter and Stats Calculations ---
-  const filteredPins = pins.filter(pin => {
-    if (filterType === 'All') return true;
-    if (filterType === 'Ramp') return pin.type === 'Önü Kapalı Rampa' || pin.type === 'Dik Rampa';
-    if (filterType === 'Elevator') return pin.type === 'Bozuk Asansör';
-    if (filterType === 'Work') return pin.type === 'Sokak Çalışması';
-    return true;
-  });
-
-  const getStats = () => {
-    const stats = { total: pins.length, ramp: 0, elevator: 0, work: 0 };
-    pins.forEach(pin => {
-      if (pin.type === 'Önü Kapalı Rampa' || pin.type === 'Dik Rampa') stats.ramp++;
-      else if (pin.type === 'Bozuk Asansör') stats.elevator++;
-      else if (pin.type === 'Sokak Çalışması') stats.work++;
-    });
-    return stats;
-  };
-
-  const stats = getStats();
-
-  const formatDate = (isoString) => {
-    const date = new Date(isoString);
-    return date.toLocaleDateString('tr-TR', {
-      day: 'numeric',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+  }, [pins, filter, query]);
 
   return (
-    <div className={`app-container ${isReportMode ? 'reporting-cursor' : ''}`}>
-      
-      {/* Toast Notification Container */}
-      <div className="toast-container">
-        {toasts.map(toast => (
-          <div key={toast.id} className={`toast ${toast.type === 'error' ? 'error' : ''}`}>
-            {toast.type === 'error' ? <AlertTriangle size={16} /> : <CheckCircle size={16} />}
-            <span>{toast.message}</span>
-          </div>
-        ))}
-      </div>
+    <div className="relative flex h-[100dvh] w-full overflow-hidden bg-bg text-ink">
+      <a
+        href="#bildirim-paneli"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-[1400] focus:rounded-lg focus:bg-brand focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
+      >
+        Bildirim paneline geç
+      </a>
+      <h1 className="sr-only">PINel — İstanbul Anadolu Yakası erişilebilirlik haritası</h1>
 
-      {/* Sidebar Panel */}
-      <aside className="sidebar">
-        
-        {/* Sidebar Header (Emojis completely removed) */}
-        <div className="sidebar-header">
-          <div className="sidebar-brand">
-            <div className="brand-icon-wrapper">
-              <Accessibility size={22} />
-            </div>
-            <div>
-              <h1 style={{ fontSize: '1.2rem', fontWeight: 800 }}>Üsküdar Meydanı / Merkez</h1>
-              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 500, marginTop: '0.1rem' }}>
-                Canlı Erişilebilirlik & Mobilite Katmanı
-              </p>
-            </div>
-          </div>
-          <p className="sidebar-desc">
-            Üsküdar Meydanı ve çevresindeki erişilebilirlik engellerini bildirin, engelli bireyler için engelsiz ve konforlu bir ulaşım ağına destek olun.
-          </p>
-        </div>
+      <main className={`absolute inset-0 lg:relative lg:flex-1 ${reportMode || pickingFor ? 'reporting cursor-crosshair' : ''}`}>
+        <MapView
+          center={MEYDAN}
+          pins={pins}
+          selectedId={selectedId}
+          reportMode={reportMode || !!pickingFor}
+          flyTarget={flyTarget}
+          userCoords={userCoords}
+          now={now}
+          votes={votes}
+          voterId={voterId}
+          officialItems={official?.items || []}
+          infraItems={showInfra ? infra?.items || [] : []}
+          ferryItems={showFerry ? transitHubs : []}
+          route={route}
+          routeStart={routeStart?.coords}
+          routeEnd={routeEnd?.coords}
+          boundary={boundary}
+          onMapReady={(m) => {
+            mapRef.current = m;
+            fitAnadolu();
+          }}
+          onPlace={handlePlace}
+          onMapMove={handleMapMove}
+          onSelect={focusPin}
+          onConfirm={(id) => castVote(id, 'confirm')}
+          onRefute={(id) => castVote(id, 'refute')}
+          onDelete={deletePin}
+          onRouteTo={routeTo}
+        />
 
-        {/* Toggle Mode Section */}
-        <div className="mode-toggle-section">
-          <div className={`toggle-card ${isReportMode ? 'active' : ''}`}>
-            <div className="toggle-info">
-              <span className="toggle-title">
-                <AlertTriangle size={16} className={isReportMode ? 'pulse-dot' : ''} style={{ color: isReportMode ? 'var(--danger)' : 'var(--text-muted)' }} />
-                Engel Bildir Modu
-              </span>
-              <span className="toggle-subtitle">
-                {isReportMode ? 'Haritaya tıklayarak engel ekle' : 'Haritada gezinmek için açık'}
-              </span>
-            </div>
-            <label className="switch">
-              <input 
-                id="report-mode-toggle"
-                type="checkbox" 
-                checked={isReportMode} 
-                onChange={(e) => {
-                  setIsReportMode(e.target.checked);
-                  if (e.target.checked) {
-                    showToast('Engel bildirim modu aktif. Bildirmek istediğiniz yere tıklayın.', 'success');
-                  } else {
-                    showToast('Harita gezinme moduna geçildi.');
-                  }
-                }}
-              />
-              <span className="slider"></span>
-            </label>
-          </div>
-        </div>
-
-        {/* Sidebar Main Content */}
-        <div className="sidebar-content">
-          
-          {/* Quick Focus Button */}
-          <button 
-            id="btn-focus-meydan"
-            className="action-btn"
-            onClick={handleFocusMeydan}
-          >
-            <Navigation size={16} />
-            Meydana Odaklan (Merkez)
-          </button>
-
-          {/* Statistics Card */}
-          <div className="stats-container">
-            <span className="stats-title">Bildirim İstatistikleri</span>
-            <div className="stats-grid">
-              <div className="stat-item">
-                <span className="stat-value">{stats.total}</span>
-                <span className="stat-label">Toplam Engel</span>
-              </div>
-              <div className="stat-item" style={{ borderLeft: '3px solid #EA580C' }}>
-                <span className="stat-value">{stats.ramp}</span>
-                <span className="stat-label">Rampa Engeli</span>
-              </div>
-              <div className="stat-item" style={{ borderLeft: '3px solid #3B82F6' }}>
-                <span className="stat-value">{stats.elevator}</span>
-                <span className="stat-label">Bozuk Asansör</span>
-              </div>
-              <div className="stat-item" style={{ borderLeft: '3px solid #10B981' }}>
-                <span className="stat-value">{stats.work}</span>
-                <span className="stat-label">Yol Çalışması</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Obstacle List with Tabs */}
-          <div className="obstacle-section">
-            <div className="section-header-row">
-              <span className="stats-title">Bildirilen Engeller</span>
-              <span className="obstacle-count-badge">{filteredPins.length} Adet</span>
-            </div>
-            
-            {/* Filter Tabs - No wrapping/truncation overflow layout, Emojis completely removed */}
-            <div style={{ display: 'flex', gap: '0.35rem', overflowX: 'auto', paddingBottom: '0.5rem', flexWrap: 'nowrap', width: '100%' }}>
-              {['All', 'Ramp', 'Elevator', 'Work'].map((t) => (
-                <button
-                  key={t}
-                  className="btn-secondary"
-                  style={{
-                    padding: '0.35rem 0.65rem',
-                    fontSize: '0.75rem',
-                    borderRadius: '20px',
-                    whiteSpace: 'nowrap',
-                    flex: '0 0 auto',
-                    backgroundColor: filterType === t ? 'var(--primary)' : 'var(--bg-card)',
-                    color: filterType === t ? '#ffffff' : 'var(--text-muted)',
-                    borderColor: filterType === t ? 'var(--primary)' : 'var(--border-color)',
-                  }}
-                  onClick={() => setFilterType(t)}
-                >
-                  {t === 'All' && 'Tümü'}
-                  {t === 'Ramp' && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                      <Accessibility size={12} />
-                      Rampa
-                    </span>
-                  )}
-                  {t === 'Elevator' && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                      <ArrowUpDown size={12} />
-                      Asansör
-                    </span>
-                  )}
-                  {t === 'Work' && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                      <Wrench size={12} />
-                      Çalışma
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* List */}
-            <div className="obstacle-list">
-              {filteredPins.length === 0 ? (
-                <div className="no-obstacles">
-                  Seçilen filtreye uygun engel bulunamadı.
-                </div>
-              ) : (
-                filteredPins.map((pin) => {
-                  const typeKey = getObstacleTypeKey(pin.type);
-                  const typeMeta = OBSTACLE_TYPES[typeKey] || { icon: <AlertTriangle size={16} />, color: '#EF4444' };
-                  
-                  return (
-                    <div 
-                      key={pin.id} 
-                      className="obstacle-card"
-                      style={{ '--danger': typeMeta.color }}
-                      onClick={() => handleFocusPin(pin)}
-                    >
-                      <div className="obstacle-card-header">
-                        <span className="obstacle-card-title">
-                          <span style={{ color: typeMeta.color, display: 'flex', alignItems: 'center' }}>
-                            {typeMeta.icon}
-                          </span>
-                          <span style={{ marginLeft: '0.35rem' }}>{pin.type}</span>
-                        </span>
-                        <span className="obstacle-card-date">{formatDate(pin.date)}</span>
-                      </div>
-                      
-                      {pin.notes && (
-                        <p className="obstacle-card-desc">{pin.notes}</p>
-                      )}
-                      
-                      {/* Live indicator on Sol Panel List Items (No emojis) */}
-                      <div className="live-indicator-wrapper">
-                        <span className="live-dot"></span>
-                        <Clock size={12} style={{ flexShrink: 0 }} />
-                        <span>Canlı Veri (Geçerlilik: 1 sa 42 dk)</span>
-                      </div>
-                      
-                      <div className="obstacle-card-actions">
-                        <button 
-                          className="btn-locate"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleFocusPin(pin);
-                          }}
-                        >
-                          <Navigation size={10} />
-                          Haritada Göster
-                        </button>
-                        <button 
-                          className="btn-delete"
-                          title="Sil"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeletePin(pin.id);
-                            if (selectedPin?.id === pin.id) setSelectedPin(null);
-                          }}
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Sidebar Footer */}
-        <footer className="sidebar-footer">
-          <span>Engelsiz Ulaşım © 2026</span>
-          <button className="theme-toggle-btn" onClick={toggleTheme}>
-            {theme === 'light' ? (
-              <>
-                <Moon size={12} />
-                <span>Koyu Tema</span>
-              </>
-            ) : (
-              <>
-                <Sun size={12} />
-                <span>Açık Tema</span>
-              </>
-            )}
-          </button>
-        </footer>
-
-      </aside>
-
-      {/* Map Section */}
-      <main className={`map-wrapper ${theme === 'dark' ? 'dark-mode-map' : ''}`}>
-        
-        {/* Floating Top Banner Alert */}
-        {isReportMode ? (
-          <div className="map-banner">
-            <span className="pulse-dot"></span>
-            <span>Engel Bildir Modu Aktif. Lütfen harita üzerinde engelin bulunduğu noktaya tıklayın.</span>
-          </div>
-        ) : (
-          <div className="map-banner info-banner">
-            <Info size={16} />
-            <span>Haritada engel bildirmek için soldaki rampa/engel modunu açın.</span>
+        {reportMode && (
+          <div className="pointer-events-auto absolute left-1/2 top-3 z-[600] flex max-w-[calc(100%-6rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-ramp/40 bg-surface px-2 py-1.5 shadow-card">
+            <span className="px-1 text-xs font-semibold text-ramp">Engel nerede?</span>
+            <button
+              type="button"
+              onClick={dropPinAtCenter}
+              className="rounded-full bg-brand px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand-hover"
+            >
+              Merkeze pin
+            </button>
+            <button
+              type="button"
+              onClick={reportHere}
+              className="rounded-full border border-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink hover:bg-surface-2"
+            >
+              Konumumdan
+            </button>
           </div>
         )}
 
-        <MapContainer 
-          center={MEYDAN_COORDS} 
-          zoom={18} 
-          className="map-container"
-          zoomControl={true}
-        >
-          {/* Tile Layer (OSM Light Style) */}
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-
-          {/* Programmatic map focus handler */}
-          <MapController coords={mapFocus.coords} zoom={mapFocus.zoom} key={mapFocus.trigger} />
-
-          {/* Capture map clicks */}
-          <MapClickHandler 
-            active={isReportMode} 
-            onMapClick={handleMapClick} 
-            onInactiveClick={handleInactiveClick}
-          />
-
-          {/* Fixed Uskudar Square Reference Point */}
-          <Marker 
-            position={MEYDAN_COORDS}
-            icon={L.divIcon({
-              className: 'campus-pin',
-              html: `
-                <div style="background-color: var(--primary); border: 2px solid white; border-radius: 50%; width: 22px; height: 22px; box-shadow: var(--shadow-lg); display: flex; align-items: center; justify-content: center;">
-                  <div style="background-color: white; width: 8px; height: 8px; border-radius: 50%;"></div>
-                </div>
-              `,
-              iconSize: [22, 22],
-              iconAnchor: [11, 11]
-            })}
+        <div className="absolute right-3 top-3 z-[600] flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={locateMe}
+            className="icon-btn shadow-card"
+            aria-label="Konumumu bul"
+            aria-busy={geoStatus === 'loading'}
           >
-            <Popup>
-              <div style={{ textAlign: 'center', padding: '0.2rem' }}>
-                <h4 style={{ fontWeight: 700, color: 'var(--primary)' }}>Üsküdar Meydanı</h4>
-                <p style={{ fontSize: '0.75rem', marginTop: '0.2rem' }}>Pilot Bölge Merkezi</p>
-              </div>
-            </Popup>
-          </Marker>
-
-          {/* Active Obstacle Markers (Color Coded Categories using custom CSS/HTML/SVG - No emojis) */}
-          {pins.map((pin) => (
-            <Marker 
-              key={pin.id} 
-              position={[pin.lat, pin.lng]} 
-              icon={getCategoryIcon(pin.type)}
-              eventHandlers={{
-                click: () => {
-                  setSelectedPin(pin);
-                }
-              }}
-            />
-          ))}
-
-          {/* Shared Active Marker Popup */}
-          {selectedPin && (
-            <Popup 
-              position={[selectedPin.lat, selectedPin.lng]} 
-              onClose={() => setSelectedPin(null)}
-            >
-              <div>
-                <h3 className="popup-header" style={{ color: OBSTACLE_TYPES[getObstacleTypeKey(selectedPin.type)]?.color, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                  {OBSTACLE_TYPES[getObstacleTypeKey(selectedPin.type)]?.icon}
-                  <span>{selectedPin.type}</span>
-                </h3>
-                <p className="popup-notes">{selectedPin.notes || 'Detay açıklaması eklenmedi.'}</p>
-                
-                {/* Live indicator inside pop-up (No emojis) */}
-                <div className="live-indicator-wrapper">
-                  <span className="live-dot"></span>
-                  <Clock size={12} style={{ flexShrink: 0 }} />
-                  <span>Canlı Veri (Geçerlilik: 1 sa 42 dk)</span>
-                </div>
-
-                <div className="popup-footer">
-                  <span>{formatDate(selectedPin.date)}</span>
-                  <button 
-                    className="popup-delete-btn" 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeletePin(selectedPin.id);
-                      setSelectedPin(null);
-                    }}
-                  >
-                    <Trash2 size={12} />
-                    Bildirimi Sil
-                  </button>
-                </div>
-              </div>
-            </Popup>
-          )}
-
-        </MapContainer>
-
+            <LocateFixed size={17} />
+          </button>
+          <button
+            type="button"
+            onClick={fitAnadolu}
+            className="icon-btn shadow-card"
+            aria-label="Anadolu yakasını göster"
+          >
+            <Crosshair size={17} />
+          </button>
+          <button
+            type="button"
+            onClick={toggleInfra}
+            className={`icon-btn shadow-card ${showInfra ? 'border-brand text-brand' : ''}`}
+            aria-label="Erişilebilir altyapı katmanını göster/gizle"
+            aria-pressed={showInfra}
+            aria-busy={infraStatus === 'loading'}
+          >
+            <Accessibility size={17} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowFerry((v) => !v)}
+            className={`icon-btn shadow-card ${showFerry ? 'border-brand text-brand' : ''}`}
+            aria-label="İskele erişilebilirlik katmanını göster/gizle"
+            aria-pressed={showFerry}
+          >
+            <Ship size={17} />
+          </button>
+        </div>
       </main>
 
-      {/* New Obstacle Modal Form */}
-      {tempCoords && (
-        <div className="modal-overlay" onClick={() => setTempCoords(null)}>
-          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
-            
-            {/* Modal Header */}
-            <div className="modal-header">
-              <h2 className="modal-title">
-                <AlertTriangle size={20} style={{ color: 'var(--danger)' }} />
-                Yeni Engel Bildirimi
-              </h2>
-              <button className="modal-close-btn" onClick={() => setTempCoords(null)}>
-                <X size={18} />
-              </button>
-            </div>
+      <aside
+        id="bildirim-paneli"
+        className={`fixed inset-x-0 bottom-0 z-[1000] flex max-h-[88dvh] flex-col rounded-t-2xl border-t border-border bg-surface shadow-sheet lg:static lg:h-full lg:max-h-none lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-none lg:transition-[width] ${
+          panelCollapsed ? 'lg:w-14' : 'lg:w-96'
+        }`}
+        aria-label="Bildirim paneli"
+      >
+        <Sidebar
+          activeView={activeView}
+          onView={selectView}
+          counts={counts}
+          points={points}
+          official={official}
+          officialStatus={officialStatus}
+          onRefreshOfficial={loadOfficial}
+          onFitOfficial={fitOfficial}
+          infra={infra}
+          infraStatus={infraStatus}
+          onRefreshInfra={loadInfra}
+          showInfra={showInfra}
+          onToggleInfra={toggleInfra}
+          infraFrom={infra?.center || userCoords || MEYDAN}
+          onFocusInfra={focusInfra}
+          routeStart={routeStart}
+          routeEnd={routeEnd}
+          route={route}
+          routeStatus={routeStatus}
+          pickingFor={pickingFor}
+          onRouteUseLocation={routeUseLocation}
+          onRouteUseMeydan={() => setRouteStart({ coords: MEYDAN, label: 'Üsküdar Meydanı' })}
+          onRoutePickStart={() => routePick('start')}
+          onRoutePickDest={() => routePick('dest')}
+          onRouteSetStart={(p) => setRouteStart({ coords: p.coords, label: p.name })}
+          onRouteSetPreset={(p) => setRouteEnd({ coords: p.coords, label: p.name })}
+          onRouteCompute={() => computeRoute(routeStart, routeEnd)}
+          onRouteClear={() => {
+            setRoute(null);
+            setRouteEnd(null);
+            setRouteStatus('idle');
+          }}
+          reportMode={reportMode}
+          onToggleReport={toggleReport}
+          query={query}
+          onQuery={setQuery}
+          filter={filter}
+          onFilter={setFilter}
+          pins={filteredPins}
+          totalCount={pins.length}
+          selectedId={selectedId}
+          now={now}
+          votes={votes}
+          voterId={voterId}
+          onSelect={focusPin}
+          onConfirm={(id) => castVote(id, 'confirm')}
+          onRefute={(id) => castVote(id, 'refute')}
+          onShare={sharePin}
+          onDelete={deletePin}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          sheetExpanded={sheetExpanded}
+          onToggleSheet={() => setSheetExpanded((v) => !v)}
+          panelCollapsed={panelCollapsed}
+        />
+      </aside>
 
-            {/* Modal Body */}
-            <div className="modal-body">
-              <div>
-                <span className="form-label" style={{ display: 'block', marginBottom: '0.4rem' }}>Koordinatlar</span>
-                <div className="coordinate-badge">
-                  Lat: {tempCoords.lat.toFixed(6)}, Lng: {tempCoords.lng.toFixed(6)}
-                </div>
-              </div>
+      {modalCoords && <ReportModal coords={modalCoords} onClose={closeReport} onSave={saveObstacle} />}
 
-              {/* Selection cards for 4 obstacle types */}
-              <div className="form-group">
-                <label className="form-label">Engel Türü Seçin</label>
-                <div className="options-grid">
-                  {Object.keys(OBSTACLE_TYPES).map((key) => {
-                    const type = OBSTACLE_TYPES[key];
-                    const isSelected = selectedObstacleType === parseInt(key);
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        className={`option-button ${isSelected ? 'selected' : ''}`}
-                        onClick={() => setSelectedObstacleType(parseInt(key))}
-                      >
-                        <span className="option-icon" style={{ color: isSelected ? 'white' : type.color, display: 'flex', alignItems: 'center' }}>
-                          {type.icon}
-                        </span>
-                        <div className="option-text-wrapper">
-                          <span className="option-label">{type.label}</span>
-                          <span className="option-desc">{type.desc}</span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Text Area for Notes */}
-              <div className="form-group">
-                <label htmlFor="notes-input" className="form-label">Açıklama & Detay (İsteğe Bağlı)</label>
-                <textarea
-                  id="notes-input"
-                  className="notes-textarea"
-                  placeholder="Engelin konumu, durumu veya ek detaylar (ör. 'Kurye motorlarının plakaları...')"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="modal-footer">
-              <button 
-                id="btn-cancel-modal"
-                className="btn-secondary" 
-                onClick={() => setTempCoords(null)}
-              >
-                Vazgeç
-              </button>
-              <button 
-                id="btn-save-obstacle"
-                className="btn-danger" 
-                onClick={handleSaveObstacle}
-              >
-                Engeli Bildir
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
-
+      <Toast toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
     </div>
   );
 }
-
-export default App;

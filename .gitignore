@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Ortam değişkenleri (API anahtarları) — asla commit'lenmez
+.env
+.env.*
+!.env.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -22,3 +27,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Playwright doğrulama artıkları
+.playwright-mcp
